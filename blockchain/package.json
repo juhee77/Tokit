@@ -1,0 +1,18 @@
+{
+  "name": "blockchain",
+  "version": "1.0.0",
+  "description": "Hardhat Solidity setup for STO ERC-1400 Security Token",
+  "scripts": {
+    "compile": "hardhat compile",
+    "test": "hardhat test",
+    "node": "hardhat node"
+  },
+  "devDependencies": {
+    "@nomicfoundation/hardhat-toolbox": "^5.0.0",
+    "hardhat": "^2.22.3",
+    "typescript": "^5.4.5"
+  },
+  "dependencies": {
+    "@openzeppelin/contracts": "^5.0.2"
+  }
+}

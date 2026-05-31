@@ -1,0 +1,48 @@
+# System Files
+.DS_Store
+Thumbs.db
+
+# IDE & Editor
+.idea/
+.vscode/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+
+# Java / Gradle
+backend/.gradle/
+backend/build/
+backend/out/
+backend/bin/
+backend/.settings/
+backend/.classpath
+backend/.project
+backend/*.iml
+backend/*.ipr
+backend/*.iws
+
+# Node / Frontend / Blockchain
+**/node_modules/
+**/dist/
+frontend/.next/
+frontend/out/
+blockchain/artifacts/
+blockchain/cache/
+blockchain/typechain-types/
+blockchain/coverage/
+blockchain/coverage.json
+blockchain/.openzeppelin/
+blockchain/.env
+
+# Local Environment / Secrets
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+*.log
+docker/db_data/
+docker/redis_data/
+docker/rabbitmq_data/

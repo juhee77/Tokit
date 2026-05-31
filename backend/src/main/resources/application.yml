@@ -1,0 +1,42 @@
+spring:
+  application:
+    name: tokit-backend
+
+  # Database Connection (PostgreSQL)
+  datasource:
+    url: jdbc:postgresql://localhost:5432/tokit
+    username: tokit
+    password: tokit
+    driver-class-name: org.postgresql.Driver
+
+  # JPA Configurations
+  jpa:
+    hibernate:
+      ddl-auto: create
+    show-sql: true
+    properties:
+      hibernate:
+        format_sql: true
+        dialect: org.hibernate.dialect.PostgreSQLDialect
+
+  # Redis Configuration
+  data:
+    redis:
+      host: localhost
+      port: 6379
+
+  # RabbitMQ Configuration
+  rabbitmq:
+    host: localhost
+    port: 5672
+    username: tokit
+    password: tokit
+
+server:
+  port: 8080
+
+logging:
+  level:
+    root: INFO
+    com.tokit: DEBUG
+    org.hibernate.SQL: DEBUG
