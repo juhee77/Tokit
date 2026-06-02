@@ -9,10 +9,15 @@ spring:
     password: tokit
     driver-class-name: org.postgresql.Driver
 
+  # Flyway Configuration
+  flyway:
+    enabled: true
+    baseline-on-migrate: true
+
   # JPA Configurations
   jpa:
     hibernate:
-      ddl-auto: create
+      ddl-auto: validate
     show-sql: true
     properties:
       hibernate:
