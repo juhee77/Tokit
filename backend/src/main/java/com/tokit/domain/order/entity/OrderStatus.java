@@ -1,8 +1,8 @@
 package com.tokit.domain.order.entity;
 
 public enum OrderStatus {
-    PENDING,
-    PARTIALLY_FILLED,
+    OPEN,
+    PARTIAL,
     FILLED,
     CANCELED
 }

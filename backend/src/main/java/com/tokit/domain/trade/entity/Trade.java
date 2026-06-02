@@ -1,5 +1,7 @@
 package com.tokit.domain.trade.entity;
 
+import com.tokit.domain.order.entity.Order;
+import com.tokit.domain.asset.entity.Asset;
 import jakarta.persistence.*;
 import lombok.AccessLevel;
 import lombok.Builder;
@@ -18,31 +20,39 @@ public class Trade {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    @Column(nullable = false, name = "buy_order_id")
-    private Long buyOrderId;
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "buy_order_id", nullable = false)
+    private Order buyOrder;
 
-    @Column(nullable = false, name = "sell_order_id")
-    private Long sellOrderId;
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "sell_order_id", nullable = false)
+    private Order sellOrder;
 
-    @Column(nullable = false, name = "asset_symbol")
-    private String assetSymbol;
+    @Column(nullable = false, precision = 20, scale = 4)
+    private BigDecimal price; // 최종 체결 단가
 
-    @Column(nullable = false, precision = 18, scale = 8)
-    private BigDecimal price;
+    @Column(nullable = false, precision = 20, scale = 4)
+    private BigDecimal quantity; // 체결된 수량
 
-    @Column(nullable = false, precision = 18, scale = 8)
-    private BigDecimal quantity;
+    @Column(name = "traded_at", nullable = false)
+    private LocalDateTime tradedAt;
 
-    @Column(nullable = false, name = "created_at")
-    private LocalDateTime createdAt;
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "asset_id", nullable = false)
+    private Asset asset; // 매칭 조회 편의를 위한 자산 관계 추가
 
     @Builder
-    public Trade(Long buyOrderId, Long sellOrderId, String assetSymbol, BigDecimal price, BigDecimal quantity) {
-        this.buyOrderId = buyOrderId;
-        this.sellOrderId = sellOrderId;
-        this.assetSymbol = assetSymbol;
+    public Trade(Order buyOrder, Order sellOrder, BigDecimal price, BigDecimal quantity, LocalDateTime tradedAt, Asset asset) {
+        this.buyOrder = buyOrder;
+        this.sellOrder = sellOrder;
         this.price = price;
         this.quantity = quantity;
-        this.createdAt = LocalDateTime.now();
+        this.tradedAt = tradedAt != null ? tradedAt : LocalDateTime.now();
+        this.asset = asset;
+    }
+
+    // --- Backward Compatibility Adapters ---
+    public String getAssetSymbol() {
+        return asset != null ? asset.getSymbol() : null;
     }
 }

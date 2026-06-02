@@ -37,11 +37,11 @@ public class MatchingService {
     public void matchOrder(Order incomingOrder) {
         log.info("Starting match process for order id: {}, symbol: {}", incomingOrder.getId(), incomingOrder.getAssetSymbol());
 
-        // 1. 매칭을 위해 반대 방향의 활성화된(PENDING, PARTIALLY_FILLED) 주문 리스트를 DB에서 조회
+        // 1. 매칭을 위해 반대 방향의 활성화된(OPEN, PARTIAL) 주문 리스트를 DB에서 조회
         OrderType oppositeType = incomingOrder.getOrderType() == OrderType.BUY ? OrderType.SELL : OrderType.BUY;
-        List<Order> oppositeOrders = orderRepository.findByAssetSymbolAndStatusIn(
+        List<Order> oppositeOrders = orderRepository.findByAsset_SymbolAndStatusIn(
                 incomingOrder.getAssetSymbol(),
-                Arrays.asList(OrderStatus.PENDING, OrderStatus.PARTIALLY_FILLED)
+                Arrays.asList(OrderStatus.OPEN, OrderStatus.PARTIAL)
         ).stream()
                 .filter(o -> o.getOrderType() == oppositeType)
                 .collect(Collectors.toList());
@@ -73,9 +73,9 @@ public class MatchingService {
 
     public void updateAndBroadcastOrderBook(String symbol) {
         // 활성화된 모든 주문 조회
-        List<Order> activeOrders = orderRepository.findByAssetSymbolAndStatusIn(
+        List<Order> activeOrders = orderRepository.findByAsset_SymbolAndStatusIn(
                 symbol,
-                Arrays.asList(OrderStatus.PENDING, OrderStatus.PARTIALLY_FILLED)
+                Arrays.asList(OrderStatus.OPEN, OrderStatus.PARTIAL)
         );
 
         // 매수 호가 집계 (가격 내림차순 정렬)

@@ -1,20 +1,19 @@
 # 🏛️ TOKIT — STO 토큰증권 초고속 매칭 엔진 & 거래소 플랫폼
 
-> **대규모 금융 트래픽 분산 처리**와 **0.1원의 오차도 허용하지 않는 강력한 데이터 정합성**을 목표로 설계된 엔터프라이즈급 STO 거래소 플랫폼입니다.
+> **대규모 금융 트래픽 분산 처리**와 **0.1원의 오차도 허용하지 않는 강력한 데이터 정합성**을 보장하는 고성능 토큰증권(STO) 거래 플랫폼의 엔터프라이즈 레퍼런스 모델입니다.
 
 ---
 
-## 🎯 1. 프로젝트 목적 및 기획 의도 (Core Vision)
+## 🎯 1. 프로젝트 비전 및 기술적 지향점 (Core Vision)
 
-### 💡 진짜 목적 (Core Engineering Goal)
-단순한 게시판 CRUD나 토이 프로젝트를 넘어선 **Expert 수준의 백엔드 아키텍처**를 증명합니다.
-- DB 데드락(Deadlock) 및 핫스팟(Hotspot)을 차단하는 동시성 제어.
-- 인메모리(Redis) 기반의 초고속 호가창 매칭 알고리즘 구현.
-- 서버 푸시(SSE/WebSocket) 스트리밍 최적화로 클라이언트 렌더링 부하 최소화.
-- 온체인(블록체인)과 오프체인(RDBMS) 간의 비동기 동기화 및 상시 데이터 대사(Reconciliation).
+### 💡 기술적 당면 과제 (Core Engineering Goal)
+- **트랜잭션 동시성 제어**: DB 데드락(Deadlock) 및 핫스팟(Hotspot)을 최소화하는 효율적인 분산 배타 락 적용.
+- **초고속 매칭 처리**: 인메모리(Redis)를 응용한 대규모 거래 매칭 알고리즘 구현.
+- **실시간 비차단 데이터 스트리밍**: 클라이언트(Next.js) 렌더링 오버헤드를 제어하는 최적화된 SSE/WebSocket 스트림 채널 구축.
+- **온-오프체인 정합성 보장**: PostgreSQL 오프체인 잔고 데이터와 블록체인(Hardhat Solidity) 온체인 스마트 컨트랙트 간의 일일 상시 대사(Reconciliation) 파이프라인 수립.
 
-### 💼 기획 의도 (Business Value)
-고가의 실물 자산(예: 상업용 부동산)을 신탁하여 수익증권을 발행하고, 이를 블록체인 기반의 토큰으로 분할 발행(STO)하여 다수의 투자자가 공모 청약 및 2차 거래(호가 매칭)를 할 수 있도록 지원하는 초고속 매칭 플랫폼입니다.
+### 💼 비즈니스 아키텍처 (Business Value)
+고가의 실물 자산(예: 상업용 부동산, 미술품 등)을 신탁하여 수익증권을 발행하고, 이를 블록체인 기반의 토큰으로 분할 발행(STO)하여 다수의 투자자가 안전하게 공모 청약 및 2차 거래(호가 매칭)를 할 수 있도록 지원하는 초고속 결제 및 매칭 인프라입니다.
 
 ---
 
@@ -56,7 +55,7 @@
 
 ## 🔄 3. 스택 간 싱크 및 개발 규칙 (Cross-Stack Sync Rules)
 
-아키텍처 붕괴 방지를 위해 3인의 전문 개발자가 독립적으로 협업하듯 아래 3가지 대원칙을 엄격하게 고수합니다.
+아키텍처 붕괴 방지를 위해 아래 3가지 개발 대원칙을 엄격하게 고수합니다.
 
 ### 1) API Contract First (계약 우선 개발)
 - 백엔드 개발 전에 무조건 JSON 응답 구조(`ApiResponse<T>`)를 확정합니다.
@@ -74,49 +73,6 @@
 
 ---
 
-## 📅 4. 12주 애자일 스프린트 로드맵 (Action Plan)
-
-포트폴리오 및 아키텍처 완성도를 위해 기능 구현 7주, 최적화 및 카오스 엔지니어링 5주로 스프린트를 전개합니다.
-
-```mermaid
-gantt
-    title TOKIT STO 12주 개발 로드맵
-    dateFormat  WEEKS
-    axisFormat  W%V
-    
-    section Phase 1: 기반 공사
-    인프라 & Monorepo 세팅 :active, w1, 2w
-    section Phase 2: 코어 비즈니스
-    돈과 주문 & 동시성 제어 (Hold/Lock) : w3, 3w
-    section Phase 3: 매칭 엔진 & 스트리밍
-    인메모리 호가창 체결 & SSE/WS 스트림 : w6, 3w
-    section Phase 4: 블록체인 연동
-    ERC-1400 배포 & 배치 데이터 대사(Reconciliation) : w9, 2w
-    section Phase 5: 최적화 & 카오스
-    JMeter 부하 테스트 & 트러블슈팅 & 블로그 연재 : w11, 2w
-```
-
-*   **Phase 1: 기반 공사 (Week 1~2)** - [완료]
-    *   Monorepo 환경 세팅 및 PostgreSQL, Redis, RabbitMQ, Hardhat 로컬 세팅.
-    *   Java 25, Boot 4.0, Next.js 16, Solidity 0.8.28 뼈대 코드 구축 및 빌드/컴파일 검증 완료.
-*   **Phase 2: 코어 비즈니스 - 돈과 주문 (Week 3~5)**
-    *   예치금 충전/차감 로직 및 주문 진입 시 예치금 홀딩(`Lock`) 처리.
-    *   낙관적 락(Optimistic Lock) 및 비관적 락(Pessimistic Lock)을 활용한 동시성 완벽 제어.
-    *   세그먼트 트리(Segment Tree) 기반 공모 청약 실시간 달성률 최적화.
-*   **Phase 3: 매칭 엔진 및 스트리밍 (Week 6~8)**
-    *   Redis Sorted Set을 활용한 인메모리 호가창 설계 및 이분 탐색 체결 엔진 완성.
-    *   체결 시 RabbitMQ 비동기 이벤트 발행 파이프라인 정밀 연동.
-    *   Next.js 프론트엔드의 화면 깜빡임을 최소화한 최적화된 SSE/WS 스트리밍 렌더링.
-*   **Phase 4: 블록체인 연동 및 검증 (Week 9~10)**
-    *   ERC-1400 규격의 스마트 컨트랙트 배포 및 비동기 온체인 동기화 워커 구축.
-    *   **Spring Batch** 기반 매일 자정 동작하는 온-오프체인 원장 잔고 데이터 대사(Reconciliation) 시스템 개발.
-*   **Phase 5: 카오스 엔지니어링 및 자산화 (Week 11~12)**
-    *   JMeter 기반 초당 10,000건 스파이크 트래픽 부하 테스트 실행.
-    *   데드락(Deadlock), 메모리 누수(Memory Leak), 스레드 풀 병목에 대한 실전 트러블슈팅.
-    *   lahezy 블로그 개발기 작성 및 juhee77 GitHub 리포지토리 아키텍처 시각화 리포트 등록.
-
----
-
 ## 🚀 Quick Start
 
 ### Prerequisites
@@ -128,6 +84,7 @@ gantt
 ```bash
 docker compose up -d
 ```
+자세한 Docker 설치, 모니터링 및 트러블슈팅 가이드는 [Docker 인프라 구축 및 가이드북](file:///Users/juhee/IdeaProjects/TOKIT/docs/docker_setup.md) 문서를 참고하십시오.
 
 ### 2. Backend 실행
 ```bash

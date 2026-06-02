@@ -1,11 +1,11 @@
 package com.tokit.domain.asset.entity;
 
+import com.tokit.domain.issuer.entity.Issuer;
 import jakarta.persistence.*;
 import lombok.AccessLevel;
 import lombok.Builder;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
-
 import java.math.BigDecimal;
 
 @Entity
@@ -18,23 +18,40 @@ public class Asset {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    @Column(nullable = false, unique = true)
-    private String symbol; // 예: "APPL-STO"
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "issuer_id", nullable = false)
+    private Issuer issuer;
 
     @Column(nullable = false)
-    private String name; // 예: "Apple Security Token"
+    private String name; // 자산명 (ex. 강남A빌딩 토큰)
 
-    @Column(nullable = false, name = "contract_address")
-    private String contractAddress; // 이더리움 ERC-1400 토큰 주소
+    @Column(name = "total_supply", nullable = false, precision = 20, scale = 4)
+    private BigDecimal totalSupply; // 총 발행량
 
-    @Column(nullable = false, name = "total_supply")
-    private BigDecimal totalSupply;
+    @Column(name = "issue_price", nullable = false, precision = 20, scale = 4)
+    private BigDecimal issuePrice; // 초기 공모가
+
+    @Column(nullable = false)
+    private String status; // 상태 (청약중/거래중/종료)
+
+    @Column(nullable = false, unique = true)
+    private String symbol; // 토큰 심볼 (ex. APPL-STO)
+
+    @Column(name = "contract_address", nullable = false)
+    private String contractAddress; // 블록체인 스마트 컨트랙트 주소
 
     @Builder
-    public Asset(String symbol, String name, String contractAddress, BigDecimal totalSupply) {
-        this.symbol = symbol;
+    public Asset(Issuer issuer, String name, BigDecimal totalSupply, BigDecimal issuePrice, String status, String symbol, String contractAddress) {
+        this.issuer = issuer;
         this.name = name;
-        this.contractAddress = contractAddress;
         this.totalSupply = totalSupply;
+        this.issuePrice = issuePrice;
+        this.status = status;
+        this.symbol = symbol;
+        this.contractAddress = contractAddress;
+    }
+
+    public void updateStatus(String status) {
+        this.status = status;
     }
 }

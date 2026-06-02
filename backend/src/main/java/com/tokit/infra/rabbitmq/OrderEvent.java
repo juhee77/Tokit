@@ -5,7 +5,7 @@ import java.math.BigDecimal;
 
 public record OrderEvent(
     Long orderId,
-    Long memberId,
+    Long userId,
     String assetSymbol,
     OrderType orderType,
     BigDecimal price,

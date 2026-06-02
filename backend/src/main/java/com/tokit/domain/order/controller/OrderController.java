@@ -25,7 +25,7 @@ public class OrderController {
     private final OrderService orderService;
 
     public record PlaceOrderRequest(
-        @NotNull(message = "Member ID is required") Long memberId,
+        @NotNull(message = "User ID is required") Long userId,
         @NotBlank(message = "Asset Symbol is required") String assetSymbol,
         @NotNull(message = "Order Type (BUY/SELL) is required") OrderType orderType,
         @NotNull(message = "Price is required") @Positive(message = "Price must be positive") BigDecimal price,
@@ -34,7 +34,7 @@ public class OrderController {
 
     public record OrderResponse(
         Long id,
-        Long memberId,
+        Long userId,
         String assetSymbol,
         OrderType orderType,
         BigDecimal price,
@@ -46,7 +46,7 @@ public class OrderController {
         public static OrderResponse from(Order order) {
             return new OrderResponse(
                 order.getId(),
-                order.getMemberId(),
+                order.getUserId(),
                 order.getAssetSymbol(),
                 order.getOrderType(),
                 order.getPrice(),
@@ -61,7 +61,7 @@ public class OrderController {
     @PostMapping
     public ResponseEntity<ApiResponse<OrderResponse>> placeOrder(@RequestBody @Valid PlaceOrderRequest request) {
         Order order = orderService.placeOrder(
-            request.memberId(),
+            request.userId(),
             request.assetSymbol(),
             request.orderType(),
             request.price(),
@@ -76,9 +76,9 @@ public class OrderController {
         return ResponseEntity.ok(ApiResponse.success());
     }
 
-    @GetMapping("/member/{memberId}")
-    public ResponseEntity<ApiResponse<List<OrderResponse>>> getOrdersByMember(@PathVariable("memberId") Long memberId) {
-        List<OrderResponse> list = orderService.getOrdersByMember(memberId).stream()
+    @GetMapping("/user/{userId}")
+    public ResponseEntity<ApiResponse<List<OrderResponse>>> getOrdersByUser(@PathVariable("userId") Long userId) {
+        List<OrderResponse> list = orderService.getOrdersByUser(userId).stream()
                 .map(OrderResponse::from)
                 .toList();
         return ResponseEntity.ok(ApiResponse.success(list));

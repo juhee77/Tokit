@@ -1,7 +1,7 @@
 package com.tokit.domain.order.service;
 
 import com.tokit.domain.asset.service.AssetService;
-import com.tokit.domain.member.service.MemberService;
+import com.tokit.domain.user.service.UserService;
 import com.tokit.domain.order.entity.Order;
 import com.tokit.domain.order.entity.OrderType;
 import com.tokit.domain.order.repository.OrderRepository;
@@ -22,23 +22,25 @@ import java.util.List;
 public class OrderService {
 
     private final OrderRepository orderRepository;
-    private final MemberService memberService;
+    private final UserService userService;
     private final AssetService assetService;
     private final OrderEventPublisher orderEventPublisher;
 
     @Transactional
-    public Order placeOrder(Long memberId, String assetSymbol, OrderType orderType, BigDecimal price, BigDecimal quantity) {
+    public Order placeOrder(Long userId, String assetSymbol, OrderType orderType, BigDecimal price, BigDecimal quantity) {
         // 회원 및 자산 유효성 검증
-        memberService.getMemberById(memberId);
-        assetService.getAssetBySymbol(assetSymbol);
+        User user = userService.getUserById(userId);
+        Asset asset = assetService.getAssetBySymbol(assetSymbol);
 
         // 주문 생성 및 저장
         Order order = Order.builder()
-                .memberId(memberId)
-                .assetSymbol(assetSymbol)
-                .orderType(orderType)
+                .user(user)
+                .asset(asset)
+                .type(orderType)
                 .price(price)
                 .quantity(quantity)
+                .remainQty(quantity)
+                .status(OrderStatus.OPEN)
                 .build();
         
         orderRepository.save(order);
@@ -46,7 +48,7 @@ public class OrderService {
         // RabbitMQ 주문 등록 이벤트 발행
         OrderEvent event = new OrderEvent(
                 order.getId(),
-                order.getMemberId(),
+                order.getUserId(),
                 order.getAssetSymbol(),
                 order.getOrderType(),
                 order.getPrice(),
@@ -69,7 +71,7 @@ public class OrderService {
                 .orElseThrow(() -> new BusinessException(ErrorCode.ORDER_NOT_FOUND));
     }
 
-    public List<Order> getOrdersByMember(Long memberId) {
-        return orderRepository.findByMemberId(memberId);
+    public List<Order> getOrdersByUser(Long userId) {
+        return orderRepository.findByUserId(userId);
     }
 }

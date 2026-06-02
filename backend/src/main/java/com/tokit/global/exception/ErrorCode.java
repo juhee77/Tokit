@@ -13,8 +13,8 @@ public enum ErrorCode {
     INVALID_TYPE_VALUE(HttpStatus.BAD_REQUEST, "C005", " Invalid type value"),
     HANDLE_ACCESS_DENIED(HttpStatus.FORBIDDEN, "C006", " Access denied"),
 
-    // Member Exceptions
-    MEMBER_NOT_FOUND(HttpStatus.NOT_FOUND, "M001", " Member not found"),
+    // User Exceptions
+    MEMBER_NOT_FOUND(HttpStatus.NOT_FOUND, "M001", " User not found"),
     EMAIL_DUPLICATION(HttpStatus.BAD_REQUEST, "M002", " Email already registered"),
 
     // Asset Exceptions

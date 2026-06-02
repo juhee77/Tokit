@@ -5,5 +5,5 @@ import org.springframework.data.jpa.repository.JpaRepository;
 import java.util.List;
 
 public interface TradeRepository extends JpaRepository<Trade, Long> {
-    List<Trade> findByAssetSymbolOrderByCreatedAtDesc(String assetSymbol);
+    List<Trade> findByAsset_SymbolOrderByTradedAtDesc(String symbol);
 }

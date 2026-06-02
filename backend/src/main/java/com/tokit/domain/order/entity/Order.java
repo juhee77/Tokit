@@ -1,5 +1,7 @@
 package com.tokit.domain.order.entity;
 
+import com.tokit.domain.user.entity.User;
+import com.tokit.domain.asset.entity.Asset;
 import jakarta.persistence.*;
 import lombok.AccessLevel;
 import lombok.Builder;
@@ -18,60 +20,81 @@ public class Order {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    @Column(nullable = false, name = "member_id")
-    private Long memberId;
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "user_id", nullable = false)
+    private User user;
 
-    @Column(nullable = false, name = "asset_symbol")
-    private String assetSymbol;
-
-    @Enumerated(EnumType.STRING)
-    @Column(nullable = false, name = "order_type")
-    private OrderType orderType;
-
-    @Column(nullable = false, precision = 18, scale = 8)
-    private BigDecimal price;
-
-    @Column(nullable = false, precision = 18, scale = 8)
-    private BigDecimal quantity;
-
-    @Column(nullable = false, name = "remaining_quantity", precision = 18, scale = 8)
-    private BigDecimal remainingQuantity;
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "asset_id", nullable = false)
+    private Asset asset;
 
     @Enumerated(EnumType.STRING)
     @Column(nullable = false)
-    private OrderStatus status;
+    private OrderType type; // BUY(매수) / SELL(매도)
 
-    @Column(nullable = false, name = "created_at")
+    @Column(nullable = false, precision = 20, scale = 4)
+    private BigDecimal price; // 주문 단가
+
+    @Column(nullable = false, precision = 20, scale = 4)
+    private BigDecimal quantity; // 최초 주문 수량
+
+    @Column(name = "remain_qty", nullable = false, precision = 20, scale = 4)
+    private BigDecimal remainQty; // 미체결 남은 수량
+
+    @Enumerated(EnumType.STRING)
+    @Column(nullable = false)
+    private OrderStatus status; // OPEN/PARTIAL/FILLED/CANCELED
+
+    @Column(name = "created_at", nullable = false)
     private LocalDateTime createdAt;
 
     @Builder
-    public Order(Long memberId, String assetSymbol, OrderType orderType, BigDecimal price, BigDecimal quantity) {
-        this.memberId = memberId;
-        this.assetSymbol = assetSymbol;
-        this.orderType = orderType;
+    public Order(User user, Asset asset, OrderType type, BigDecimal price, BigDecimal quantity, BigDecimal remainQty, OrderStatus status, LocalDateTime createdAt) {
+        this.user = user;
+        this.asset = asset;
+        this.type = type;
         this.price = price;
         this.quantity = quantity;
-        this.remainingQuantity = quantity;
-        this.status = OrderStatus.PENDING;
-        this.createdAt = LocalDateTime.now();
+        this.remainQty = remainQty;
+        this.status = status;
+        this.createdAt = createdAt != null ? createdAt : LocalDateTime.now();
     }
 
-    public void updateRemainingQuantity(BigDecimal filledQuantity) {
-        if (filledQuantity.compareTo(this.remainingQuantity) > 0) {
-            throw new IllegalArgumentException("Filled quantity cannot be greater than remaining quantity");
-        }
-        this.remainingQuantity = this.remainingQuantity.subtract(filledQuantity);
-        if (this.remainingQuantity.compareTo(BigDecimal.ZERO) == 0) {
+    public void updateRemainQty(BigDecimal remainQty) {
+        this.remainQty = remainQty;
+    }
+
+    public void updateStatus(OrderStatus status) {
+        this.status = status;
+    }
+
+    public void updateRemainingQuantity(BigDecimal matchQty) {
+        this.remainQty = this.remainQty.subtract(matchQty);
+        if (this.remainQty.compareTo(BigDecimal.ZERO) <= 0) {
             this.status = OrderStatus.FILLED;
         } else {
-            this.status = OrderStatus.PARTIALLY_FILLED;
+            this.status = OrderStatus.PARTIAL;
         }
     }
 
     public void cancel() {
-        if (this.status == OrderStatus.FILLED || this.status == OrderStatus.CANCELED) {
-            throw new IllegalStateException("Filled or Canceled orders cannot be canceled");
-        }
         this.status = OrderStatus.CANCELED;
+    }
+
+    // --- Backward Compatibility Adapters ---
+    public Long getUserId() {
+        return user != null ? user.getId() : null;
+    }
+
+    public String getAssetSymbol() {
+        return asset != null ? asset.getSymbol() : null;
+    }
+
+    public OrderType getOrderType() {
+        return type;
+    }
+
+    public BigDecimal getRemainingQuantity() {
+        return remainQty;
     }
 }
