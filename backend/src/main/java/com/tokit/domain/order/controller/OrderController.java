@@ -12,6 +12,7 @@ import jakarta.validation.constraints.Positive;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
+import com.tokit.global.annotation.Idempotent;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
@@ -59,7 +60,10 @@ public class OrderController {
     }
 
     @PostMapping
-    public ResponseEntity<ApiResponse<OrderResponse>> placeOrder(@RequestBody @Valid PlaceOrderRequest request) {
+    @Idempotent
+    public ResponseEntity<ApiResponse<OrderResponse>> placeOrder(
+            @RequestHeader("X-Idempotency-Key") String idempotencyKey,
+            @RequestBody @Valid PlaceOrderRequest request) {
         Order order = orderService.placeOrder(
             request.userId(),
             request.assetSymbol(),
@@ -71,7 +75,10 @@ public class OrderController {
     }
 
     @PostMapping("/{id}/cancel")
-    public ResponseEntity<ApiResponse<Void>> cancelOrder(@PathVariable("id") Long id) {
+    @Idempotent
+    public ResponseEntity<ApiResponse<Void>> cancelOrder(
+            @RequestHeader("X-Idempotency-Key") String idempotencyKey,
+            @PathVariable("id") Long id) {
         orderService.cancelOrder(id);
         return ResponseEntity.ok(ApiResponse.success());
     }
