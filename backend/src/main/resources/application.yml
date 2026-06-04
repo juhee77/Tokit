@@ -4,9 +4,9 @@ spring:
 
   # Database Connection (PostgreSQL)
   datasource:
-    url: jdbc:postgresql://localhost:5432/tokit
-    username: tokit
-    password: tokit
+    url: jdbc:postgresql://${DB_HOST:localhost}:${DB_PORT:5432}/${DB_NAME:tokit}
+    username: ${DB_USERNAME:tokit}
+    password: ${DB_PASSWORD:tokit}
     driver-class-name: org.postgresql.Driver
 
   # Flyway Configuration
@@ -27,18 +27,18 @@ spring:
   # Redis Configuration
   data:
     redis:
-      host: localhost
-      port: 6379
+      host: ${REDIS_HOST:localhost}
+      port: ${REDIS_PORT:6379}
 
   # RabbitMQ Configuration
   rabbitmq:
-    host: localhost
-    port: 5672
-    username: tokit
-    password: tokit
+    host: ${RABBITMQ_HOST:localhost}
+    port: ${RABBITMQ_PORT:5672}
+    username: ${RABBITMQ_USERNAME:tokit}
+    password: ${RABBITMQ_PASSWORD:tokit}
 
 server:
-  port: 8080
+  port: ${PORT:8080}
 
 logging:
   level:
