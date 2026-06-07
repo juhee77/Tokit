@@ -1,0 +1,373 @@
+"use client"
+
+import { useState } from "react"
+import { cn } from "@/lib/utils"
+import { Wallet, Lock, ArrowUpRight, ArrowDownRight, X, ArrowRight, Building2 } from "lucide-react"
+
+interface AssetData {
+  totalBalance: number
+  availableBalance: number
+  lockedBalance: number
+  totalTokenValue: number
+  tokens: TokenHolding[]
+}
+
+interface TokenHolding {
+  symbol: string
+  name: string
+  quantity: number
+  averagePrice: number
+  currentPrice: number
+  value: number
+  change: number
+  changePercent: number
+}
+
+interface OrderHistory {
+  id: string
+  symbol: string
+  side: "buy" | "sell"
+  type: "limit" | "market"
+  price: number
+  quantity: number
+  filledQuantity: number
+  status: "pending" | "partial" | "filled" | "cancelled"
+  createdAt: Date
+}
+
+const mockAssets: AssetData = {
+  totalBalance: 15000000,
+  availableBalance: 5000000,
+  lockedBalance: 10000000,
+  totalTokenValue: 45000000,
+  tokens: [
+    {
+      symbol: "GNPM",
+      name: "서울 강남 프라임 오피스",
+      quantity: 2500,
+      averagePrice: 10000,
+      currentPrice: 12500,
+      value: 31250000,
+      change: 6250000,
+      changePercent: 25.0,
+    },
+    {
+      symbol: "BSND",
+      name: "부산 해운대 리조트",
+      quantity: 1200,
+      averagePrice: 8500,
+      currentPrice: 7800,
+      value: 9360000,
+      change: -840000,
+      changePercent: -8.24,
+    },
+    {
+      symbol: "JJIS",
+      name: "제주 물류센터",
+      quantity: 450,
+      averagePrice: 12000,
+      currentPrice: 12300,
+      value: 5535000,
+      change: 135000,
+      changePercent: 2.5,
+    },
+  ],
+}
+
+const mockOrders: OrderHistory[] = [
+  {
+    id: "1",
+    symbol: "GNPM",
+    side: "buy",
+    type: "limit",
+    price: 12500,
+    quantity: 100,
+    filledQuantity: 100,
+    status: "filled",
+    createdAt: new Date(Date.now() - 1000 * 60 * 30),
+  },
+  {
+    id: "2",
+    symbol: "GNPM",
+    side: "buy",
+    type: "limit",
+    price: 12400,
+    quantity: 200,
+    filledQuantity: 120,
+    status: "partial",
+    createdAt: new Date(Date.now() - 1000 * 60 * 15),
+  },
+  {
+    id: "3",
+    symbol: "BSND",
+    side: "sell",
+    type: "market",
+    price: 7800,
+    quantity: 50,
+    filledQuantity: 0,
+    status: "pending",
+    createdAt: new Date(Date.now() - 1000 * 60 * 5),
+  },
+  {
+    id: "4",
+    symbol: "JJIS",
+    side: "buy",
+    type: "limit",
+    price: 12100,
+    quantity: 100,
+    filledQuantity: 0,
+    status: "cancelled",
+    createdAt: new Date(Date.now() - 1000 * 60 * 60 * 2),
+  },
+]
+
+const statusConfig = {
+  pending: { label: "미체결", className: "border-warning text-warning bg-warning/10" },
+  partial: { label: "부분 체결", className: "border-secondary text-secondary bg-secondary/10" },
+  filled: { label: "완전 체결", className: "border-green-600 text-green-600 bg-green-50" },
+  cancelled: { label: "취소됨", className: "border-outline text-muted-foreground bg-surface-container" },
+}
+
+export function WalletHistory() {
+  const [assets] = useState<AssetData>(mockAssets)
+  const [orders] = useState<OrderHistory[]>(mockOrders)
+  const [activeTab, setActiveTab] = useState<"assets" | "orders">("assets")
+
+  const formatKRW = (value: number) => {
+    if (Math.abs(value) >= 100000000) {
+      return `${(value / 100000000).toFixed(2)}억원`
+    }
+    if (Math.abs(value) >= 10000) {
+      return `${(value / 10000).toFixed(0)}만원`
+    }
+    return `${value.toLocaleString()}원`
+  }
+
+  const formatTime = (date: Date) => {
+    const now = new Date()
+    const diff = now.getTime() - date.getTime()
+    const minutes = Math.floor(diff / (1000 * 60))
+    const hours = Math.floor(diff / (1000 * 60 * 60))
+
+    if (minutes < 60) return `${minutes}분 전`
+    if (hours < 24) return `${hours}시간 전`
+    return date.toLocaleDateString("ko-KR")
+  }
+
+  return (
+    <div className="space-y-6">
+      {/* Balance Overview */}
+      <div className="bg-card border border-outline-variant rounded shadow-sm p-4 md:p-6">
+        <div className="flex items-center gap-2 mb-4">
+          <Wallet className="h-5 w-5 text-secondary" />
+          <h2 className="font-semibold text-foreground">자산 현황</h2>
+        </div>
+        
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          {/* Total Assets */}
+          <div className="bg-surface-container-low rounded p-4">
+            <p className="text-label-caps text-muted-foreground mb-1">총 보유 자산</p>
+            <p className="text-2xl font-bold text-foreground font-mono">
+              {formatKRW(assets.totalBalance + assets.totalTokenValue)}
+            </p>
+          </div>
+
+          {/* Available Balance */}
+          <div className="bg-surface-container-low rounded p-4">
+            <p className="text-label-caps text-muted-foreground mb-1">사용 가능 금액</p>
+            <p className="text-2xl font-bold text-secondary font-mono">
+              {formatKRW(assets.availableBalance)}
+            </p>
+          </div>
+
+          {/* Locked Balance */}
+          <div className="bg-surface-container-low rounded p-4">
+            <div className="flex items-center gap-1 mb-1">
+              <Lock className="h-3 w-3 text-muted-foreground" />
+              <p className="text-label-caps text-muted-foreground">주문 중 홀딩</p>
+            </div>
+            <p className="text-2xl font-bold text-warning font-mono">
+              {formatKRW(assets.lockedBalance)}
+            </p>
+            <p className="text-xs text-muted-foreground mt-1">
+              미체결 주문으로 인해 잠김
+            </p>
+          </div>
+        </div>
+      </div>
+
+      {/* Tabs */}
+      <div className="bg-card border border-outline-variant rounded shadow-sm overflow-hidden">
+        <div className="flex border-b border-outline-variant">
+          <button
+            onClick={() => setActiveTab("assets")}
+            className={cn(
+              "flex-1 px-4 py-3 text-sm font-medium transition-colors",
+              activeTab === "assets"
+                ? "text-secondary border-b-2 border-secondary bg-surface-container-low"
+                : "text-muted-foreground hover:text-foreground"
+            )}
+          >
+            보유 토큰
+          </button>
+          <button
+            onClick={() => setActiveTab("orders")}
+            className={cn(
+              "flex-1 px-4 py-3 text-sm font-medium transition-colors",
+              activeTab === "orders"
+                ? "text-secondary border-b-2 border-secondary bg-surface-container-low"
+                : "text-muted-foreground hover:text-foreground"
+            )}
+          >
+            체결 내역
+          </button>
+        </div>
+
+        {/* Token Holdings */}
+        {activeTab === "assets" && (
+          <div className="divide-y divide-surface-container-highest">
+            {assets.tokens.map((token) => (
+              <div key={token.symbol} className="p-4 hover:bg-surface-container-low transition-colors cursor-pointer">
+                <div className="flex items-start justify-between">
+                  <div className="flex items-start gap-3">
+                    <div className="w-10 h-10 rounded bg-surface-container flex items-center justify-center border border-surface-variant">
+                      <Building2 className="w-5 h-5 text-muted-foreground" />
+                    </div>
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <span className="font-semibold text-foreground">{token.symbol}</span>
+                        <span className="text-sm text-muted-foreground">{token.name}</span>
+                      </div>
+                      <p className="text-sm text-muted-foreground mt-1">
+                        {token.quantity.toLocaleString()}주 · 평균 {token.averagePrice.toLocaleString()}원
+                      </p>
+                    </div>
+                  </div>
+                  <div className="text-right">
+                    <p className="font-semibold text-foreground font-mono">{formatKRW(token.value)}</p>
+                    <div className={cn(
+                      "flex items-center justify-end gap-1 text-sm",
+                      token.changePercent >= 0 ? "text-gain" : "text-loss"
+                    )}>
+                      {token.changePercent >= 0 ? (
+                        <ArrowUpRight className="h-3 w-3" />
+                      ) : (
+                        <ArrowDownRight className="h-3 w-3" />
+                      )}
+                      <span>{token.changePercent >= 0 ? "+" : ""}{token.changePercent.toFixed(2)}%</span>
+                      <span className="text-muted-foreground">
+                        ({token.change >= 0 ? "+" : ""}{formatKRW(token.change)})
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            ))}
+            
+            {/* View All Link */}
+            <div className="p-4 text-center">
+              <button className="text-secondary text-sm font-medium hover:underline inline-flex items-center gap-1">
+                모든 보유 토큰 보기
+                <ArrowRight className="w-4 h-4" />
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* Order History */}
+        {activeTab === "orders" && (
+          <>
+            {/* Header - Hidden on mobile, visible on md+ */}
+            <div className="hidden md:grid grid-cols-6 gap-4 text-label-caps text-muted-foreground px-4 py-3 border-b border-surface-container-highest bg-surface-container-low">
+              <span>종목</span>
+              <span>구분</span>
+              <span className="text-right">가격</span>
+              <span className="text-right">수량</span>
+              <span className="text-center">상태</span>
+              <span className="text-right">시간</span>
+            </div>
+
+            <div className="divide-y divide-surface-container-highest">
+              {orders.map((order) => (
+                <div 
+                  key={order.id} 
+                  className="p-4 hover:bg-surface-container-low transition-colors"
+                >
+                  {/* Mobile Layout */}
+                  <div className="md:hidden space-y-2">
+                    <div className="flex justify-between items-start">
+                      <div>
+                        <span className="font-medium text-foreground">{order.symbol}</span>
+                        <span className={cn(
+                          "ml-2 text-sm font-medium",
+                          order.side === "buy" ? "text-gain" : "text-loss"
+                        )}>
+                          {order.side === "buy" ? "매수" : "매도"}
+                        </span>
+                      </div>
+                      <span className={cn(
+                        "px-2 py-0.5 text-[10px] uppercase font-bold tracking-wider rounded border",
+                        statusConfig[order.status].className
+                      )}>
+                        {statusConfig[order.status].label}
+                      </span>
+                    </div>
+                    <div className="flex justify-between text-sm">
+                      <span className="text-muted-foreground">{order.price.toLocaleString()}원 × {order.filledQuantity}/{order.quantity}</span>
+                      <span className="text-muted-foreground">{formatTime(order.createdAt)}</span>
+                    </div>
+                  </div>
+
+                  {/* Desktop Layout */}
+                  <div className="hidden md:grid grid-cols-6 gap-4 items-center">
+                    <span className="font-medium text-foreground">{order.symbol}</span>
+                    <span className={cn(
+                      "text-sm font-medium",
+                      order.side === "buy" ? "text-gain" : "text-loss"
+                    )}>
+                      {order.side === "buy" ? "매수" : "매도"}
+                      <span className="text-muted-foreground font-normal ml-1">
+                        {order.type === "limit" ? "지정가" : "시장가"}
+                      </span>
+                    </span>
+                    <span className="text-right font-mono text-foreground">
+                      {order.price.toLocaleString()}
+                    </span>
+                    <span className="text-right font-mono">
+                      <span className="text-foreground">{order.filledQuantity.toLocaleString()}</span>
+                      <span className="text-muted-foreground">/{order.quantity.toLocaleString()}</span>
+                    </span>
+                    <div className="text-center">
+                      <span className={cn(
+                        "px-2 py-0.5 text-[10px] uppercase font-bold tracking-wider rounded border inline-block",
+                        statusConfig[order.status].className
+                      )}>
+                        {statusConfig[order.status].label}
+                      </span>
+                    </div>
+                    <div className="flex items-center justify-end gap-2">
+                      <span className="text-sm text-muted-foreground">{formatTime(order.createdAt)}</span>
+                      {(order.status === "pending" || order.status === "partial") && (
+                        <button className="p-1 rounded hover:bg-surface-container transition-colors text-muted-foreground hover:text-destructive">
+                          <X className="h-4 w-4" />
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            {/* View All Link */}
+            <div className="p-4 text-center border-t border-surface-container-highest">
+              <button className="text-secondary text-sm font-medium hover:underline inline-flex items-center gap-1">
+                모든 체결 내역 보기
+                <ArrowRight className="w-4 h-4" />
+              </button>
+            </div>
+          </>
+        )}
+      </div>
+    </div>
+  )
+}
