@@ -23,6 +23,14 @@ interface IERC1400 {
         bytes calldata data
     ) external returns (bytes32);
 
+    function forceTransferByPartition(
+        bytes32 partition,
+        address from,
+        address to,
+        uint256 value,
+        bytes calldata data
+    ) external returns (bytes32);
+
     event TransferByPartition(
         bytes32 indexed fromPartition,
         address operator,

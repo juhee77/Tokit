@@ -125,6 +125,40 @@ contract AssetToken is ERC20, IERC1400 {
         return partition;
     }
 
+    // --- Admin Force Partition Transfer for Off-Chain Settlement ---
+    function forceTransferByPartition(
+        bytes32 partition,
+        address from,
+        address to,
+        uint256 value,
+        bytes calldata data
+    ) external onlyOwner onlyWhitelisted(from) onlyWhitelisted(to) returns (bytes32) {
+        require(_partitionBalances[partition][from] >= value, "Insufficient partition balance for force transfer");
+
+        // 잔고 차감 및 가산
+        _partitionBalances[partition][from] -= value;
+        _partitionBalances[partition][to] += value;
+
+        // 파티션 목록 관리
+        bool hasPartition = false;
+        bytes32[] memory toPartitions = _holderPartitions[to];
+        for (uint256 i = 0; i < toPartitions.length; i++) {
+            if (toPartitions[i] == partition) {
+                hasPartition = true;
+                break;
+            }
+        }
+        if (!hasPartition) {
+            _holderPartitions[to].push(partition);
+        }
+
+        // 표준 ERC20 전송 병행
+        _transfer(from, to, value);
+
+        emit TransferByPartition(partition, msg.sender, from, to, value, data, "");
+        return partition;
+    }
+
     // --- Issuance & Redemption (발행 및 상환) ---
     function issue(
         address tokenHolder,
