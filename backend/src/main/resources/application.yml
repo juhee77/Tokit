@@ -37,6 +37,13 @@ spring:
     username: ${RABBITMQ_USERNAME:tokit}
     password: ${RABBITMQ_PASSWORD:tokit}
 
+  # Spring Batch Configuration
+  batch:
+    jdbc:
+      initialize-schema: always
+    job:
+      enabled: false
+
 server:
   port: ${PORT:8080}
 
@@ -45,3 +52,11 @@ logging:
     root: INFO
     com.tokit: DEBUG
     org.hibernate.SQL: DEBUG
+
+# Custom configurations
+tokit:
+  blockchain:
+    rpc-url: ${BLOCKCHAIN_RPC_URL:http://localhost:8545}
+    contract-address: ${BLOCKCHAIN_CONTRACT_ADDRESS:0x5FbDB2315678afecb367f032d93F642f64180aa3}
+    private-key: ${BLOCKCHAIN_PRIVATE_KEY:0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80}
+

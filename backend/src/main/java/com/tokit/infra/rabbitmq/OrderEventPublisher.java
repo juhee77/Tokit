@@ -21,4 +21,13 @@ public class OrderEventPublisher {
             event
         );
     }
+
+    public void publishTrade(TradeEvent event) {
+        log.info("Publishing trade event to RabbitMQ: {}", event);
+        rabbitTemplate.convertAndSend(
+            RabbitMQConfig.EXCHANGE_NAME,
+            RabbitMQConfig.TRADE_ROUTING_KEY,
+            event
+        );
+    }
 }

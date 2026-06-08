@@ -8,6 +8,8 @@ import com.tokit.domain.asset.entity.Asset;
 import com.tokit.domain.asset.repository.AssetRepository;
 import com.tokit.domain.wallet.entity.Wallet;
 import com.tokit.domain.wallet.repository.WalletRepository;
+import com.tokit.infra.rabbitmq.TradeEvent;
+import com.tokit.infra.rabbitmq.OrderEventPublisher;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -32,6 +34,7 @@ public class TradeService {
     private final OrderRepository orderRepository;
     private final AssetRepository assetRepository;
     private final WalletRepository walletRepository;
+    private final OrderEventPublisher orderEventPublisher;
     
     // 심볼별 SSE Emitter 리스트 관리
     private final Map<String, List<SseEmitter>> emitters = new ConcurrentHashMap<>();
@@ -90,6 +93,19 @@ public class TradeService {
         buyerAssetWallet.updateBalance(buyerAssetWallet.getBalance().add(quantity), buyerAssetWallet.getLockedBalance());
         
         Trade savedTrade = tradeRepository.save(trade);
+        
+        // RabbitMQ 체결 이벤트 발행 (온체인 동기화용)
+        TradeEvent tradeEvent = new TradeEvent(
+                savedTrade.getId(),
+                buyOrder.getId(),
+                sellOrder.getId(),
+                assetSymbol,
+                buyOrder.getUser().getWalletAddress(),
+                sellOrder.getUser().getWalletAddress(),
+                price,
+                quantity
+        );
+        orderEventPublisher.publishTrade(tradeEvent);
         
         // 실시간 스트리밍 전송
         broadcastTrade(savedTrade);

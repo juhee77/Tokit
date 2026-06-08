@@ -12,6 +12,8 @@ public class RabbitMQConfig {
     public static final String EXCHANGE_NAME = "tokit.exchange";
     public static final String ORDER_QUEUE_NAME = "tokit.order.queue";
     public static final String ORDER_ROUTING_KEY = "tokit.order.routing";
+    public static final String TRADE_QUEUE_NAME = "tokit.trade.queue";
+    public static final String TRADE_ROUTING_KEY = "tokit.trade.routing";
 
     @Bean
     public DirectExchange exchange() {
@@ -24,8 +26,18 @@ public class RabbitMQConfig {
     }
 
     @Bean
-    public Binding binding(Queue orderQueue, DirectExchange exchange) {
+    public Queue tradeQueue() {
+        return new Queue(TRADE_QUEUE_NAME, true);
+    }
+
+    @Bean
+    public Binding orderBinding(Queue orderQueue, DirectExchange exchange) {
         return BindingBuilder.bind(orderQueue).to(exchange).with(ORDER_ROUTING_KEY);
+    }
+
+    @Bean
+    public Binding tradeBinding(Queue tradeQueue, DirectExchange exchange) {
+        return BindingBuilder.bind(tradeQueue).to(exchange).with(TRADE_ROUTING_KEY);
     }
 
     @Bean
