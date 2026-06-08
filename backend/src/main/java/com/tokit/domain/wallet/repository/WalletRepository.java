@@ -7,9 +7,14 @@ import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import java.util.Optional;
 
 public interface WalletRepository extends JpaRepository<Wallet, Long> {
+
+    // 토큰 자산 지갑 조회를 위한 페이징 메서드 (Batch 용)
+    Page<Wallet> findByAssetIsNotNull(Pageable pageable);
 
     // 원화(KRW) 지갑 조회를 위한 메서드 (asset_id IS NULL)
     @Lock(LockModeType.PESSIMISTIC_WRITE)
