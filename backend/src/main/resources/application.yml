@@ -13,6 +13,9 @@ spring:
   flyway:
     enabled: true
     baseline-on-migrate: true
+    url: jdbc:postgresql://${DB_HOST:localhost}:${DB_PORT:5432}/${DB_NAME:tokit}
+    user: ${DB_USERNAME:tokit}
+    password: ${DB_PASSWORD:tokit}
 
   # JPA Configurations
   jpa:
