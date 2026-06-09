@@ -55,4 +55,16 @@ public class Trade {
     public String getAssetSymbol() {
         return asset != null ? asset.getSymbol() : null;
     }
+
+    public Long getBuyOrderId() {
+        return buyOrder != null ? buyOrder.getId() : null;
+    }
+
+    public Long getSellOrderId() {
+        return sellOrder != null ? sellOrder.getId() : null;
+    }
+
+    public LocalDateTime getCreatedAt() {
+        return tradedAt;
+    }
 }
