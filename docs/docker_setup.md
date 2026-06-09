@@ -84,3 +84,17 @@ docker compose up -d
 ```
 > [!CAUTION]
 > `-v` 옵션을 주면 PostgreSQL 및 Redis 데이터 볼륨이 물리적으로 완전히 삭제되어 복구가 불가능합니다. 개발 모드에서만 사용하십시오.
+
+### Q3. "FATAL: role \"tokit\" does not exist" (DB 계정/초기화 꼬임) 에러 발생 시
+PostgreSQL 컨테이너가 생성될 때 기존의 오래된 볼륨 잔해가 남아 있어 `docker-compose.yml`에 지정한 `tokit` 계정과 데이터베이스가 정상적으로 초기화 및 생성되지 못해 발생합니다.
+- **해결 방안**:
+  1. 기동 중인 컨테이너와 볼륨을 강제로 삭제하여 데이터베이스 설정을 완전히 비웁니다:
+     ```bash
+     docker compose down -v
+     ```
+  2. 컨테이너를 백그라운드로 재기동하여 계정과 DB가 신규 생성되도록 초기화합니다:
+     ```bash
+     docker compose up -d
+     ```
+  3. 백엔드를 다시 실행하여 정상 접속되는지 확인합니다.
+
