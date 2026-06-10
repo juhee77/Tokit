@@ -39,8 +39,6 @@ class ReconciliationBatchTest {
     @BeforeEach
     void setUp() {
         reconciliationBatchConfig = new ReconciliationBatchConfig(
-                null, 
-                null, 
                 walletRepository,
                 reconciliationLogRepository,
                 contractService
@@ -126,11 +124,26 @@ class ReconciliationBatchTest {
     @Test
     void reconciliationLogWriter_ShouldSaveLogs() throws Exception {
         // Given
+        User user = User.builder()
+                .name("Hong Gildong")
+                .email("hong@test.com")
+                .walletAddress("0x70997970C51812dc3A010C7d01b50e0d17dc79C8")
+                .build();
+
+        Asset asset = Asset.builder()
+                .name("APPL STO")
+                .symbol("APPL-STO")
+                .contractAddress("0x5FbDB2315678afecb367f032d93F642f64180aa3")
+                .build();
+
         ReconciliationLog logEntry = ReconciliationLog.builder()
+                .user(user)
+                .asset(asset)
                 .walletAddress("0x70997970C51812dc3A010C7d01b50e0d17dc79C8")
                 .offchainBalance(BigDecimal.valueOf(120))
                 .onchainBalance(BigDecimal.valueOf(100))
                 .difference(BigDecimal.valueOf(20))
+                .checkedAt(java.time.LocalDateTime.now())
                 .build();
         
         List<ReconciliationLog> logs = List.of(logEntry);

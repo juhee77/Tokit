@@ -81,7 +81,7 @@ class WalletConcurrencyTest {
         latch.await();
 
         // then
-        Wallet wallet = walletRepository.findKrwWalletByUserIdWithPessimisticLock(testUser.getId()).orElseThrow();
+        Wallet wallet = walletRepository.findKrwWalletByUserId(testUser.getId()).orElseThrow();
         assertThat(wallet.getBalance().stripTrailingZeros())
                 .isEqualTo(new BigDecimal("1000000").stripTrailingZeros());
     }

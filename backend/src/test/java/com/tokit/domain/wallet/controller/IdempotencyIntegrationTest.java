@@ -10,11 +10,12 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.http.MediaType;
 import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.test.web.servlet.setup.MockMvcBuilders;
+import org.springframework.web.context.WebApplicationContext;
 
 import java.math.BigDecimal;
 import java.util.UUID;
@@ -27,11 +28,12 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 
 @SpringBootTest
-@AutoConfigureMockMvc
 class IdempotencyIntegrationTest {
 
-    @Autowired
     private MockMvc mockMvc;
+
+    @Autowired
+    private WebApplicationContext webApplicationContext;
 
     @Autowired
     private ObjectMapper objectMapper;
@@ -49,6 +51,7 @@ class IdempotencyIntegrationTest {
 
     @BeforeEach
     void setUp() {
+        mockMvc = MockMvcBuilders.webAppContextSetup(webApplicationContext).build();
         walletRepository.deleteAll();
         userRepository.deleteAll();
         redisTemplate.getConnectionFactory().getConnection().serverCommands().flushAll();
@@ -118,7 +121,7 @@ class IdempotencyIntegrationTest {
         assertThat(successCount.get()).isEqualTo(1); // 오직 1개의 요청만 성공해야 함
         
         // 잔고 검증: 50,000원이 정확히 1번만 충전되어야 함
-        Wallet wallet = walletRepository.findKrwWalletByUserIdWithPessimisticLock(testUser.getId()).orElseThrow();
+        Wallet wallet = walletRepository.findKrwWalletByUserId(testUser.getId()).orElseThrow();
         assertThat(wallet.getBalance().stripTrailingZeros())
                 .isEqualTo(new BigDecimal("50000").stripTrailingZeros());
     }

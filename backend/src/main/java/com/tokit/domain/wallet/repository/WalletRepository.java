@@ -20,6 +20,9 @@ public interface WalletRepository extends JpaRepository<Wallet, Long> {
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("SELECT w FROM Wallet w WHERE w.user.id = :userId AND w.asset IS NULL")
     Optional<Wallet> findKrwWalletByUserIdWithPessimisticLock(@Param("userId") Long userId);
+    
+    @Query("SELECT w FROM Wallet w WHERE w.user.id = :userId AND w.asset IS NULL")
+    Optional<Wallet> findKrwWalletByUserId(@Param("userId") Long userId);
 
     // 특정 토큰 자산 지갑 조회를 위한 메서드
     @Lock(LockModeType.PESSIMISTIC_WRITE)
