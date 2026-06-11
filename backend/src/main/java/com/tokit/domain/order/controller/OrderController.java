@@ -5,6 +5,8 @@ import com.tokit.domain.order.entity.OrderStatus;
 import com.tokit.domain.order.entity.OrderType;
 import com.tokit.domain.order.service.OrderService;
 import com.tokit.global.dto.ApiResponse;
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
@@ -18,6 +20,7 @@ import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.List;
 
+@Tag(name = "04. Order (주문)", description = "토큰증권(STO) 매수/매도 주문 접수 및 취소 API")
 @RestController
 @RequestMapping("/api/orders")
 @RequiredArgsConstructor
@@ -61,6 +64,7 @@ public class OrderController {
 
     @PostMapping
     @Idempotent
+    @Operation(summary = "매수/매도 주문 접수", description = "주식 토큰의 매수 혹은 매도 주문을 접수합니다. (Idempotency 보장)")
     public ResponseEntity<ApiResponse<OrderResponse>> placeOrder(
             @RequestHeader("X-Idempotency-Key") String idempotencyKey,
             @RequestBody @Valid PlaceOrderRequest request) {
@@ -76,6 +80,7 @@ public class OrderController {
 
     @PostMapping("/{id}/cancel")
     @Idempotent
+    @Operation(summary = "주문 취소", description = "접수되어 대기 중인 주문을 취소합니다. (Idempotency 보장)")
     public ResponseEntity<ApiResponse<Void>> cancelOrder(
             @RequestHeader("X-Idempotency-Key") String idempotencyKey,
             @PathVariable("id") Long id) {
@@ -84,6 +89,7 @@ public class OrderController {
     }
 
     @GetMapping("/user/{userId}")
+    @Operation(summary = "사용자 주문 내역 조회", description = "특정 사용자의 전체 주문 내역 리스트를 조회합니다.")
     public ResponseEntity<ApiResponse<List<OrderResponse>>> getOrdersByUser(@PathVariable("userId") Long userId) {
         List<OrderResponse> list = orderService.getOrdersByUser(userId).stream()
                 .map(OrderResponse::from)
