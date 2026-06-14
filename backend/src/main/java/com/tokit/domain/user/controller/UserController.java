@@ -30,10 +30,11 @@ public class UserController {
         Long id,
         String email,
         String name,
-        String walletAddress
+        String walletAddress,
+        boolean kycStatus
     ) {
         public static UserResponse from(User user) {
-            return new UserResponse(user.getId(), user.getEmail(), user.getName(), user.getWalletAddress());
+            return new UserResponse(user.getId(), user.getEmail(), user.getName(), user.getWalletAddress(), user.isKycStatus());
         }
     }
 

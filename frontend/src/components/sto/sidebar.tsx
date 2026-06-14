@@ -26,6 +26,7 @@ const navItems = [
       { label: 'Dashboard', href: '/' },
       { label: 'My Assets', href: '/wallet' },
       { label: 'History', href: '/history' },
+      { label: 'My Page', href: '/mypage' },
     ]
   },
   {
