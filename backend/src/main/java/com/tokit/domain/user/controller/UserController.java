@@ -51,4 +51,14 @@ public class UserController {
         User user = userService.getUserById(id);
         return ResponseEntity.ok(ApiResponse.success(UserResponse.from(user)));
     }
+
+    @PutMapping("/{id}/kyc")
+    @Operation(summary = "KYC 신원인증 상태 변경", description = "사용자의 KYC 신원인증 상태를 변경합니다.")
+    public ResponseEntity<ApiResponse<UserResponse>> updateKyc(
+            @PathVariable("id") Long id,
+            @RequestParam("kycStatus") boolean kycStatus
+    ) {
+        User user = userService.updateKycStatus(id, kycStatus);
+        return ResponseEntity.ok(ApiResponse.success(UserResponse.from(user)));
+    }
 }

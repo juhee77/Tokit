@@ -54,16 +54,16 @@ export function Orderbook({ symbol = "GNPM", onPriceSelect }: OrderbookProps) {
   const [flashCells, setFlashCells] = useState<Set<string>>(new Set());
   
   // Zustand 스토어 연동 (실시간 WebSocket 데이터)
-  const orderBookData = useTradeStore((state) => state.orderBookData);
+  const orderBook = useTradeStore((state) => state.orderBook);
 
   // MVP UI 구조에 맞춰 데이터 포맷팅
   const data: OrderbookData = {
-    asks: [...(orderBookData?.asks || [])].reverse().map(a => ({
+    asks: [...(orderBook?.asks || [])].reverse().map(a => ({
       price: a.price,
       quantity: a.quantity,
       total: a.price * a.quantity
     })),
-    bids: (orderBookData?.bids || []).map(b => ({
+    bids: (orderBook?.bids || []).map(b => ({
       price: b.price,
       quantity: b.quantity,
       total: b.price * b.quantity

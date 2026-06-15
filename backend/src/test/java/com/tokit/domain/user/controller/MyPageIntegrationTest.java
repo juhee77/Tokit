@@ -2,6 +2,8 @@ package com.tokit.domain.user.controller;
 
 import com.tokit.domain.asset.entity.Asset;
 import com.tokit.domain.asset.repository.AssetRepository;
+import com.tokit.domain.issuer.entity.Issuer;
+import com.tokit.domain.issuer.repository.IssuerRepository;
 import com.tokit.domain.order.entity.Order;
 import com.tokit.domain.order.entity.OrderStatus;
 import com.tokit.domain.order.entity.OrderType;
@@ -51,6 +53,9 @@ class MyPageIntegrationTest {
     private AssetRepository assetRepository;
 
     @Autowired
+    private IssuerRepository issuerRepository;
+
+    @Autowired
     private OrderRepository orderRepository;
 
     @Autowired
@@ -59,6 +64,7 @@ class MyPageIntegrationTest {
     private User testUser;
     private User counterParty;
     private Asset testAsset;
+    private Issuer testIssuer;
 
     @BeforeEach
     void setUp() {
@@ -79,8 +85,15 @@ class MyPageIntegrationTest {
                 .kycStatus(true)
                 .build());
 
+        // Setup Issuer
+        testIssuer = issuerRepository.save(Issuer.builder()
+                .companyName("Korea Land Trust")
+                .bizRegNo("123-45-67890")
+                .build());
+
         // Setup Asset
         testAsset = assetRepository.save(Asset.builder()
+                .issuer(testIssuer)
                 .name("Seoul Office STO")
                 .symbol("SO-STO")
                 .contractAddress("0x서울빌딩주소")
@@ -154,6 +167,6 @@ class MyPageIntegrationTest {
                 .andExpect(jsonPath("$.data.orders[0].assetSymbol", is("SO-STO")))
                 .andExpect(jsonPath("$.data.trades", hasSize(1)))
                 .andExpect(jsonPath("$.data.trades[0].assetSymbol", is("SO-STO")))
-                .andExpect(jsonPath("$.data.trades[0].price", is(10000.0)));
+                .andExpect(jsonPath("$.data.trades[0].price", is(10000)));
     }
 }

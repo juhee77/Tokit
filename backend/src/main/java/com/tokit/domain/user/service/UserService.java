@@ -32,4 +32,11 @@ public class UserService {
         return userRepository.findById(id)
                 .orElseThrow(() -> new BusinessException(ErrorCode.MEMBER_NOT_FOUND));
     }
+
+    @Transactional
+    public User updateKycStatus(Long id, boolean kycStatus) {
+        User user = getUserById(id);
+        user.updateKycStatus(kycStatus);
+        return user;
+    }
 }

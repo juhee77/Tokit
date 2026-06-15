@@ -36,7 +36,7 @@ public class MyPageService {
                 .map(WalletResponse::from)
                 .toList();
 
-        List<OrderResponse> orders = orderRepository.findByUserId(userId).stream()
+        List<OrderResponse> orders = orderRepository.findByUser_Id(userId).stream()
                 .map(OrderResponse::from)
                 .toList();
 
