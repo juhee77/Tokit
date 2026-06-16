@@ -17,15 +17,12 @@ public class UserService {
 
     @Transactional
     public User signUp(String email, String name, String walletAddress) {
-        if (userRepository.findByEmail(email).isPresent()) {
-            throw new BusinessException(ErrorCode.EMAIL_DUPLICATION);
-        }
-        User user = User.builder()
-                .email(email)
-                .name(name)
-                .walletAddress(walletAddress)
-                .build();
-        return userRepository.save(user);
+        return userRepository.findByEmail(email)
+                .orElseGet(() -> userRepository.save(User.builder()
+                        .email(email)
+                        .name(name)
+                        .walletAddress(walletAddress)
+                        .build()));
     }
 
     public User getUserById(Long id) {

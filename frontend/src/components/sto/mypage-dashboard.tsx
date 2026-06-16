@@ -279,6 +279,21 @@ export function MyPageDashboard() {
     )
   }
 
+  // Display error state if no data could be loaded
+  if (!data) {
+    return (
+      <div className="flex-1 flex flex-col items-center justify-center py-20 text-slate-400 gap-3">
+        <p className="text-sm font-semibold text-destructive">마이페이지 데이터를 불러오지 못했습니다.</p>
+        <button 
+          onClick={() => loadMyPageData(userId)}
+          className="mt-2 px-4 py-2 text-xs font-semibold bg-surface border border-outline-variant rounded hover:border-secondary transition-colors"
+        >
+          다시 시도
+        </button>
+      </div>
+    )
+  }
+
   return (
     <div className="space-y-6">
       {/* Page Title & Refresh */}
