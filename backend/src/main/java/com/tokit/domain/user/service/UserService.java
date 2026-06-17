@@ -4,6 +4,7 @@ import com.tokit.domain.user.entity.User;
 import com.tokit.domain.user.repository.UserRepository;
 import com.tokit.global.exception.BusinessException;
 import com.tokit.global.exception.ErrorCode;
+import com.tokit.infra.blockchain.ContractService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -14,6 +15,7 @@ import org.springframework.transaction.annotation.Transactional;
 public class UserService {
 
     private final UserRepository userRepository;
+    private final ContractService contractService;
 
     @Transactional
     public User signUp(String email, String name, String walletAddress) {
@@ -34,6 +36,14 @@ public class UserService {
     public User updateKycStatus(Long id, boolean kycStatus) {
         User user = getUserById(id);
         user.updateKycStatus(kycStatus);
+        
+        // 온체인 화이트리스트 동기화
+        if (kycStatus) {
+            contractService.addToWhitelist(user.getWalletAddress());
+        } else {
+            contractService.removeFromWhitelist(user.getWalletAddress());
+        }
+        
         return user;
     }
 }

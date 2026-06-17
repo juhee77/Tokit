@@ -1,6 +1,7 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, Suspense } from "react"
+import { useSearchParams } from "next/navigation"
 import { Orderbook } from "@/components/sto/orderbook"
 import { OrderForm } from "@/components/sto/order-form"
 import { cn } from "@/lib/utils"
@@ -64,21 +65,31 @@ interface RecentTrade {
   time: Date
 }
 
-export default function TradingPage() {
-  const selectedSymbol = useTradeStore((state) => state.selectedSymbol);
-  const assets = useTradeStore((state) => state.assets);
-  const recentTrades = useTradeStore((state) => state.recentTrades);
-  const setSelectedSymbol = useTradeStore((state) => state.setSelectedSymbol);
-  const setAssets = useTradeStore((state) => state.setAssets);
-  const setRecentTrades = useTradeStore((state) => state.setRecentTrades);
+function TradingContent() {
+  const searchParams = useSearchParams()
+  const querySymbol = searchParams.get("symbol")
+
+  const selectedSymbol = useTradeStore((state) => state.selectedSymbol)
+  const assets = useTradeStore((state) => state.assets)
+  const recentTrades = useTradeStore((state) => state.recentTrades)
+  const setSelectedSymbol = useTradeStore((state) => state.setSelectedSymbol)
+  const setAssets = useTradeStore((state) => state.setAssets)
+  const setRecentTrades = useTradeStore((state) => state.setRecentTrades)
 
   // 실시간 스트리밍 가동
-  useOrderBookStream(selectedSymbol);
-  useTradeStream(selectedSymbol);
+  useOrderBookStream(selectedSymbol)
+  useTradeStream(selectedSymbol)
 
-  const [initializing, setInitializing] = useState(true);
-  const [selectedPrice, setSelectedPrice] = useState<number | undefined>();
-  const [showTokenSelector, setShowTokenSelector] = useState(false);
+  const [initializing, setInitializing] = useState(true)
+  const [selectedPrice, setSelectedPrice] = useState<number | undefined>()
+  const [showTokenSelector, setShowTokenSelector] = useState(false)
+
+  // Sync query parameter symbol to store
+  useEffect(() => {
+    if (querySymbol && querySymbol !== selectedSymbol) {
+      setSelectedSymbol(querySymbol)
+    }
+  }, [querySymbol, selectedSymbol, setSelectedSymbol])
 
   // 초기 자산 목록 로드
   useEffect(() => {
@@ -301,5 +312,13 @@ export default function TradingPage() {
         </div>
       </div>
     </div>
+  )
+}
+
+export default function TradingPage() {
+  return (
+    <Suspense fallback={<div className="flex-1 flex items-center justify-center p-20 text-slate-400">Loading STO Core...</div>}>
+      <TradingContent />
+    </Suspense>
   )
 }

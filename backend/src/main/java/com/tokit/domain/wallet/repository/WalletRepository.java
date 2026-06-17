@@ -9,6 +9,7 @@ import org.springframework.data.repository.query.Param;
 
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
+import java.math.BigDecimal;
 import java.util.List;
 import java.util.Optional;
 
@@ -32,4 +33,10 @@ public interface WalletRepository extends JpaRepository<Wallet, Long> {
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("SELECT w FROM Wallet w WHERE w.user.id = :userId AND w.asset.id = :assetId")
     Optional<Wallet> findAssetWalletByUserIdAndAssetIdWithPessimisticLock(@Param("userId") Long userId, @Param("assetId") Long assetId);
+
+    @Query("SELECT COALESCE(SUM(w.balance), 0) FROM Wallet w WHERE w.asset.id = :assetId")
+    BigDecimal sumBalanceByAssetId(@Param("assetId") Long assetId);
+
+    @Query("SELECT COUNT(DISTINCT w.user.id) FROM Wallet w WHERE w.asset.id = :assetId")
+    long countInvestorsByAssetId(@Param("assetId") Long assetId);
 }

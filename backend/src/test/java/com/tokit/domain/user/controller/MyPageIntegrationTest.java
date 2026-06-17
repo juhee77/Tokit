@@ -88,7 +88,7 @@ class MyPageIntegrationTest {
         // Setup Issuer
         testIssuer = issuerRepository.save(Issuer.builder()
                 .companyName("Korea Land Trust")
-                .bizRegNo("123-45-67890")
+                .bizRegNo("999-99-99999")
                 .build());
 
         // Setup Asset

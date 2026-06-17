@@ -94,6 +94,102 @@ public class ContractService {
     }
 
     /**
+     * 화이트리스트 주소 추가 (온체인 트랜잭션 전송)
+     */
+    public void addToWhitelist(String walletAddress) {
+        log.info("Adding address to blockchain whitelist: {}", walletAddress);
+        try {
+            Function function = new Function(
+                    "addToWhitelist",
+                    Arrays.asList(new Address(walletAddress)),
+                    Arrays.asList()
+            );
+
+            String encodedFunction = FunctionEncoder.encode(function);
+            TransactionManager txManager = new RawTransactionManager(web3j, credentials);
+            
+            BigInteger gasPrice = web3j.ethGasPrice().send().getGasPrice();
+            BigInteger gasLimit = BigInteger.valueOf(500_000L);
+
+            EthSendTransaction response = txManager.sendTransaction(
+                    gasPrice,
+                    gasLimit,
+                    contractAddress,
+                    encodedFunction,
+                    BigInteger.ZERO
+            );
+
+            if (response.hasError()) {
+                log.error("Blockchain addToWhitelist TX failed: {}", response.getError().getMessage());
+                throw new RuntimeException("Blockchain TX Error: " + response.getError().getMessage());
+            }
+
+            String txHash = response.getTransactionHash();
+            log.info("Sent addToWhitelist TX. TxHash: {}", txHash);
+
+            TransactionReceiptProcessor receiptProcessor = new PollingTransactionReceiptProcessor(web3j, 1000, 15);
+            TransactionReceipt receipt = receiptProcessor.waitForTransactionReceipt(txHash);
+            
+            if (receipt.isStatusOK()) {
+                log.info("Address successfully whitelisted on-chain.");
+            } else {
+                throw new RuntimeException("Blockchain TX reverted");
+            }
+        } catch (Exception e) {
+            log.error("Failed to whitelist address on blockchain: " + walletAddress, e);
+            throw new RuntimeException(e);
+        }
+    }
+
+    /**
+     * 화이트리스트 주소 제거 (온체인 트랜잭션 전송)
+     */
+    public void removeFromWhitelist(String walletAddress) {
+        log.info("Removing address from blockchain whitelist: {}", walletAddress);
+        try {
+            Function function = new Function(
+                    "removeFromWhitelist",
+                    Arrays.asList(new Address(walletAddress)),
+                    Arrays.asList()
+            );
+
+            String encodedFunction = FunctionEncoder.encode(function);
+            TransactionManager txManager = new RawTransactionManager(web3j, credentials);
+            
+            BigInteger gasPrice = web3j.ethGasPrice().send().getGasPrice();
+            BigInteger gasLimit = BigInteger.valueOf(500_000L);
+
+            EthSendTransaction response = txManager.sendTransaction(
+                    gasPrice,
+                    gasLimit,
+                    contractAddress,
+                    encodedFunction,
+                    BigInteger.ZERO
+            );
+
+            if (response.hasError()) {
+                log.error("Blockchain removeFromWhitelist TX failed: {}", response.getError().getMessage());
+                throw new RuntimeException("Blockchain TX Error: " + response.getError().getMessage());
+            }
+
+            String txHash = response.getTransactionHash();
+            log.info("Sent removeFromWhitelist TX. TxHash: {}", txHash);
+
+            TransactionReceiptProcessor receiptProcessor = new PollingTransactionReceiptProcessor(web3j, 1000, 15);
+            TransactionReceipt receipt = receiptProcessor.waitForTransactionReceipt(txHash);
+            
+            if (receipt.isStatusOK()) {
+                log.info("Address successfully removed from whitelist on-chain.");
+            } else {
+                throw new RuntimeException("Blockchain TX reverted");
+            }
+        } catch (Exception e) {
+            log.error("Failed to remove address from whitelist on blockchain: " + walletAddress, e);
+            throw new RuntimeException(e);
+        }
+    }
+
+    /**
      * 블록체인 네트워크 상에서 STO 토큰 전송(Partition-based transfer) 이벤트를 처리
      * 여기서는 Admin(Owner) 권한으로 forceTransferByPartition을 직접 날려서 온체인 잔고 동기화를 수행
      */
