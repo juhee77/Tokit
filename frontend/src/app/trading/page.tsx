@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect, Suspense } from "react"
+import { useState, useEffect, Suspense, useCallback } from "react"
 import { useSearchParams } from "next/navigation"
 import { Orderbook } from "@/components/sto/orderbook"
 import { OrderForm } from "@/components/sto/order-form"
@@ -84,6 +84,33 @@ function TradingContent() {
   const [selectedPrice, setSelectedPrice] = useState<number | undefined>()
   const [showTokenSelector, setShowTokenSelector] = useState(false)
 
+  const [wallets, setWallets] = useState<any[]>([])
+  const [userId, setUserId] = useState<number>(1)
+
+  const loadWallets = useCallback(async (currentUserId: number) => {
+    try {
+      const res = await fetchApi<any>(`/api/users/${currentUserId}/mypage`)
+      setWallets(res.wallets || [])
+    } catch (e) {
+      console.error("Failed to load user wallets:", e)
+    }
+  }, [])
+
+  useEffect(() => {
+    let savedId = 1
+    if (typeof window !== "undefined") {
+      const raw = localStorage.getItem("tokit_userId")
+      if (raw) savedId = parseInt(raw, 10)
+    }
+    setUserId(savedId)
+    loadWallets(savedId)
+  }, [loadWallets])
+
+  const krwWallet = wallets.find(w => w.assetSymbol === null || w.assetSymbol === "KRW" || !w.assetSymbol)
+  const tokenWallet = wallets.find(w => w.assetSymbol === selectedSymbol)
+  const availableBalance = krwWallet ? krwWallet.balance : 0
+  const availableTokens = tokenWallet ? tokenWallet.balance : 0
+
   // Sync query parameter symbol to store
   useEffect(() => {
     if (querySymbol && querySymbol !== selectedSymbol) {
@@ -123,13 +150,19 @@ function TradingContent() {
   }, [selectedSymbol, setAssets, setRecentTrades, setSelectedSymbol]);
 
   const currentAsset = assets.find((a) => a.symbol === selectedSymbol);
-  // MVP UI를 위한 임시 매핑 데이터
+  const currentPrice = recentTrades.length > 0
+    ? recentTrades[0].price
+    : (currentAsset?.issuePrice || 12500)
+
+  // MVP UI를 위한 임시 매핑 데이터 및 실시간 데이터 바인딩
   const tokenStats = {
-    currentPrice: 12500,
-    change: 150,
-    changePercent: 1.21,
-    high24h: 12700,
-    low24h: 12200,
+    currentPrice: currentPrice,
+    change: currentAsset?.issuePrice ? currentPrice - currentAsset.issuePrice : 0,
+    changePercent: currentAsset?.issuePrice && currentAsset.issuePrice > 0 
+      ? ((currentPrice - currentAsset.issuePrice) / currentAsset.issuePrice) * 100 
+      : 0,
+    high24h: currentPrice * 1.05,
+    low24h: currentPrice * 0.95,
     volume24h: 1250000000,
   };
 
@@ -249,6 +282,9 @@ function TradingContent() {
         <div className="lg:col-span-4">
           <Orderbook 
             symbol={selectedSymbol} 
+            lastPrice={tokenStats.currentPrice}
+            priceChange={tokenStats.change}
+            priceChangePercent={tokenStats.changePercent}
             onPriceSelect={setSelectedPrice}
           />
         </div>
@@ -259,6 +295,9 @@ function TradingContent() {
             symbol={selectedSymbol}
             currentPrice={tokenStats.currentPrice}
             selectedPrice={selectedPrice}
+            availableBalance={availableBalance}
+            availableTokens={availableTokens}
+            onOrderSubmit={() => loadWallets(userId)}
           />
         </div>
 

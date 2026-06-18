@@ -4,6 +4,7 @@ export interface Asset {
   name: string;
   contractAddress: string;
   totalSupply: number;
+  issuePrice?: number;
 }
 
 export interface OrderBookEntry {

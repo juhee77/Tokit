@@ -3,6 +3,8 @@
 import { useState, useCallback, useEffect } from "react"
 import { Loader2 } from "lucide-react"
 import { cn } from "@/lib/utils"
+import { fetchApi } from "@/lib/api"
+import { toast } from "sonner"
 
 interface OrderFormProps {
   symbol?: string
@@ -10,6 +12,7 @@ interface OrderFormProps {
   selectedPrice?: number
   availableBalance?: number
   availableTokens?: number
+  onOrderSubmit?: () => void
 }
 
 export function OrderForm({
@@ -18,12 +21,21 @@ export function OrderForm({
   selectedPrice,
   availableBalance = 5000000,
   availableTokens = 450,
+  onOrderSubmit,
 }: OrderFormProps) {
   const [orderType, setOrderType] = useState<"limit" | "market">("limit")
   const [side, setSide] = useState<"buy" | "sell">("buy")
   const [price, setPrice] = useState(selectedPrice?.toString() || currentPrice.toString())
   const [quantity, setQuantity] = useState("")
   const [isSubmitting, setIsSubmitting] = useState(false)
+  const [userId, setUserId] = useState<number>(1)
+
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      const raw = localStorage.getItem("tokit_userId")
+      if (raw) setUserId(parseInt(raw, 10))
+    }
+  }, [])
 
   useEffect(() => {
     if (selectedPrice) {
@@ -53,15 +65,47 @@ export function OrderForm({
     }
   }, [side, maxBuyQuantity, maxSellQuantity])
 
+  const generateUUID = () => {
+    if (typeof window !== "undefined" && window.crypto && window.crypto.randomUUID) {
+      return window.crypto.randomUUID()
+    }
+    return "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g, function (c) {
+      const r = (Math.random() * 16) | 0
+      const v = c === "x" ? r : (r & 0x3) | 0x8
+      return v.toString(16)
+    })
+  }
+
   const handleSubmit = useCallback(async () => {
     if (quantityNum <= 0) return
     if (orderType === "limit" && priceNum <= 0) return
 
     setIsSubmitting(true)
-    await new Promise(resolve => setTimeout(resolve, 2000))
-    setIsSubmitting(false)
-    setQuantity("")
-  }, [quantityNum, priceNum, orderType])
+    try {
+      const key = generateUUID()
+      await fetchApi("/api/orders", {
+        method: "POST",
+        headers: {
+          "X-Idempotency-Key": key
+        },
+        body: JSON.stringify({
+          userId: userId,
+          assetSymbol: symbol,
+          orderType: side === "buy" ? "BUY" : "SELL",
+          price: orderType === "market" ? currentPrice : priceNum,
+          quantity: quantityNum
+        })
+      })
+      toast.success(`${side === "buy" ? "매수" : "매도"} 주문이 성공적으로 접수되었습니다.`)
+      setQuantity("")
+      onOrderSubmit?.()
+    } catch (err: any) {
+      console.error(err)
+      toast.error("주문 실패: " + err.message)
+    } finally {
+      setIsSubmitting(false)
+    }
+  }, [quantityNum, priceNum, orderType, side, symbol, currentPrice, userId, onOrderSubmit])
 
   const isValidOrder = quantityNum > 0 && (orderType === "market" || priceNum > 0)
   const hasEnoughBalance = side === "buy" ? totalAmount <= availableBalance : quantityNum <= availableTokens

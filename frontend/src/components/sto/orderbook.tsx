@@ -21,6 +21,9 @@ interface OrderbookData {
 
 interface OrderbookProps {
   symbol?: string
+  lastPrice?: number
+  priceChange?: number
+  priceChangePercent?: number
   onPriceSelect?: (price: number) => void
 }
 
@@ -50,7 +53,13 @@ function generateMockOrderbook(): OrderbookData {
   }
 }
 
-export function Orderbook({ symbol = "GNPM", onPriceSelect }: OrderbookProps) {
+export function Orderbook({ 
+  symbol = "GNPM", 
+  lastPrice = 12500,
+  priceChange = 0,
+  priceChangePercent = 0,
+  onPriceSelect 
+}: OrderbookProps) {
   const [flashCells, setFlashCells] = useState<Set<string>>(new Set());
   
   // Zustand 스토어 연동 (실시간 WebSocket 데이터)
@@ -68,9 +77,9 @@ export function Orderbook({ symbol = "GNPM", onPriceSelect }: OrderbookProps) {
       quantity: b.quantity,
       total: b.price * b.quantity
     })),
-    lastPrice: 12500, // 임시
-    priceChange: 150,
-    priceChangePercent: 1.21,
+    lastPrice: lastPrice,
+    priceChange: priceChange,
+    priceChangePercent: priceChangePercent,
   };
 
   const maxAskQuantity = data.asks.length > 0 ? Math.max(...data.asks.map(a => a.quantity)) : 1;
