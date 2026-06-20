@@ -70,6 +70,29 @@ const statusConfig = {
   CANCELED: { label: "취소됨", className: "border-outline text-muted-foreground bg-surface-container" },
 }
 
+const formatKoreanTextAmount = (amountStr: string | number): string => {
+  const cleanStr = typeof amountStr === "number" ? Math.floor(amountStr).toString() : amountStr.replace(/[^0-9]/g, "")
+  if (!cleanStr) return ""
+  const num = parseInt(cleanStr, 10)
+  if (num === 0) return "0원"
+
+  const units = ["", "만", "억", "조", "경"]
+  let result: string[] = []
+  let temp = num
+
+  let unitIndex = 0
+  while (temp > 0) {
+    const chunk = temp % 10000
+    if (chunk > 0) {
+      result.push(`${chunk.toLocaleString()}${units[unitIndex]}`)
+    }
+    temp = Math.floor(temp / 10000)
+    unitIndex++
+  }
+
+  return result.reverse().join(" ") + "원"
+}
+
 export function MyPageDashboard() {
   const [data, setData] = useState<MyPageResponse | null>(null)
   const [loading, setLoading] = useState<boolean>(true)
@@ -416,6 +439,11 @@ export function MyPageDashboard() {
                   충전
                 </button>
               </div>
+              {depositAmount && (
+                <p className="text-xs text-secondary font-mono mt-1 pl-1">
+                  입금 금액: {formatKoreanTextAmount(depositAmount)}
+                </p>
+              )}
             </form>
 
             <hr className="border-outline-variant/60" />
@@ -444,6 +472,11 @@ export function MyPageDashboard() {
                   출금
                 </button>
               </div>
+              {withdrawAmount && (
+                <p className="text-xs text-secondary font-mono mt-1 pl-1">
+                  출금 금액: {formatKoreanTextAmount(withdrawAmount)}
+                </p>
+              )}
             </form>
           </div>
         </div>
@@ -499,14 +532,17 @@ export function MyPageDashboard() {
               <div className="bg-surface-container rounded p-4 border border-outline-variant">
                 <span className="text-xs text-muted-foreground font-semibold">사용 가능 예치금</span>
                 <p className="text-xl font-bold font-mono text-secondary mt-1">{formatKRW(krwBalance)}</p>
+                <p className="text-xs text-muted-foreground mt-1 font-mono">{formatKoreanTextAmount(krwBalance)}</p>
               </div>
               <div className="bg-surface-container rounded p-4 border border-outline-variant">
                 <span className="text-xs text-muted-foreground font-semibold">주문 거래용 홀딩 (락)</span>
                 <p className="text-xl font-bold font-mono text-warning mt-1">{formatKRW(krwLocked)}</p>
+                <p className="text-xs text-muted-foreground mt-1 font-mono">{formatKoreanTextAmount(krwLocked)}</p>
               </div>
               <div className="bg-surface-container rounded p-4 border border-outline-variant">
                 <span className="text-xs text-muted-foreground font-semibold">총 자산 평가액</span>
                 <p className="text-xl font-bold font-mono text-foreground mt-1">{formatKRW(krwBalance + krwLocked)}</p>
+                <p className="text-xs text-muted-foreground mt-1 font-mono">{formatKoreanTextAmount(krwBalance + krwLocked)}</p>
               </div>
             </div>
 
