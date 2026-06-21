@@ -82,7 +82,78 @@
 
 ---
 
-## 🚀 Quick Start
+## 🔄 4. 플랫폼 핵심 비즈니스 흐름 (Core Platform Flows)
+
+TOKIT STO 플랫폼은 온-오프체인 데이터의 정합성을 보장하며 크게 3가지 비즈니스 플로우로 작동합니다.
+
+### 1) 회원가입 및 KYC 화이트리스트 등록
+```mermaid
+sequenceDiagram
+    autonumber
+    actor User as 투자자 (김토킷)
+    participant FE as 프론트엔드 (Next.js)
+    participant BE as 백엔드 (Spring Boot)
+    participant DB as 데이터베이스 (PostgreSQL)
+    participant BC as 블록체인 (Hardhat Node)
+
+    User->>FE: 마이페이지 접속
+    FE->>BE: GET /api/users/{id}/mypage
+    BE-->>FE: 회원 정보 및 지갑 잔고 반환 (미가입 시 자동 가입)
+    User->>FE: KYC인증 토글 클릭
+    FE->>BE: PUT /api/users/{id}/kyc?kycStatus=true
+    BE->>BC: ERC-1400.addToWhitelist(userAddress) (온체인 화이트리스트 등록)
+    BE->>DB: 사용자 KYC 상태 업데이트 (true)
+    BE-->>FE: 성공 응답 반환
+```
+- **화이트리스트 통제**: 블록체인 온체인 상의 자산 이동은 화이트리스트에 등록된 지갑 주소 간에만 승인되므로, 오프체인 KYC 인증 성공 시 즉시 스마트 컨트랙트의 `addToWhitelist` 함수를 동기적으로 호출하여 온체인 규제를 준수합니다.
+
+### 2) 공모 청약 신청 (Primary Market)
+```mermaid
+sequenceDiagram
+    autonumber
+    actor User as 투자자 (김토킷)
+    participant FE as 프론트엔드 (Next.js)
+    participant BE as 백엔드 (Spring Boot)
+    participant DB as 데이터베이스 (PostgreSQL/Redis)
+    participant BC as 블록체인 (Hardhat Node)
+
+    User->>FE: 마켓 페이지 접속 및 공모 상품 선택
+    FE->>BE: GET /api/assets
+    BE-->>FE: 자산 목록 및 실시간 모집액/달성률 반환
+    User->>FE: 청약 금액 입력 (하단에 실시간 한글 금액 변환 출력)
+    FE->>BE: POST /api/assets/{symbol}/subscribe (X-Idempotency-Key 헤더)
+    Note over BE: Redis 분산 락을 이용한 멱등성 검증<br/>예치금(KRW) 잔액 확인 및 차감
+    BE->>DB: KRW 지갑 잔액 차감 & STO 토큰 지갑 잔고 추가
+    BE->>BC: ERC-1400.transferByPartition() (온체인 토큰 배정)
+    BE-->>FE: 성공 및 배정 완료 응답 반환
+```
+- **멱등성 및 온-오프체인 정합성**: 사용자의 이중 결제 방지를 위해 API 요청 헤더에 멱등성 키(`X-Idempotency-Key`)를 필수 포함하고, 예치금 차감 완료 즉시 블록체인의 `transferByPartition` 함수를 실행하여 온체인 증권 배정을 즉시 결산합니다.
+
+### 3) 상장 자산 실시간 거래 (Secondary Market)
+```mermaid
+sequenceDiagram
+    autonumber
+    actor User as 투자자
+    participant FE as 프론트엔드 (Next.js)
+    participant BE as 백엔드 (Spring Boot)
+    participant DB as 데이터베이스 (PostgreSQL/Redis)
+    participant MQ as RabbitMQ / 매칭 엔진
+
+    FE->>BE: GET /api/trades/asset/{symbol} (최근 체결 조회)
+    FE->>BE: STOMP WebSocket 및 SSE 연결 구독
+    User->>FE: 매수 / 매도 주문 제출 (지정가/시장가)
+    FE->>BE: POST /api/orders (X-Idempotency-Key 헤더)
+    BE->>DB: 주문 접수 및 잔고 홀딩(Lock) 처리
+    BE->>MQ: Order_Placed 이벤트 발행 및 매칭 엔진 처리
+    Note over MQ: 매칭 완료 시 Trade_Success 이벤트 발행
+    MQ->>BE: 체결 정보 전송 및 DB 반영
+    BE->>FE: WebSocket/SSE 브로드캐스팅 (호가창 및 체결 갱신)
+```
+- **실시간 비차단 결합**: 거래소 화면 진입 시 STOMP WebSocket (`ws-tokit`) 채널과 SSE (`/api/trades/subscribe/{symbol}`)를 동시 구독하여, 초고속 오프체인 매칭 엔진에서 연산된 체결 및 호가 정보를 화면에 실시간으로 반영합니다.
+
+---
+
+## 🚀 5. Quick Start
 
 ### Prerequisites
 - Java 25 (LTS)
