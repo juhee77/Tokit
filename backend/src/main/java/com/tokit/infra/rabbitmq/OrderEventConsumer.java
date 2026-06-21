@@ -22,8 +22,8 @@ public class OrderEventConsumer {
         log.info("Consumed order event from RabbitMQ: {}", event);
         
         try {
-            // DB에서 최신 주문 정보 조회
-            Order order = orderRepository.findById(event.orderId())
+            // DB에서 최신 주문 정보 조회 (Lazy Loading 예외 방지를 위해 Asset을 JOIN FETCH로 함께 조회)
+            Order order = orderRepository.findByIdWithAsset(event.orderId())
                     .orElseThrow(() -> new IllegalArgumentException("Order not found with id: " + event.orderId()));
             
             // 매칭 프로세스 기동

@@ -34,6 +34,8 @@ public interface WalletRepository extends JpaRepository<Wallet, Long> {
     @Query("SELECT w FROM Wallet w WHERE w.user.id = :userId AND w.asset.id = :assetId")
     Optional<Wallet> findAssetWalletByUserIdAndAssetIdWithPessimisticLock(@Param("userId") Long userId, @Param("assetId") Long assetId);
 
+    Optional<Wallet> findByUserIdAndAssetId(Long userId, Long assetId);
+
     @Query("SELECT COALESCE(SUM(w.balance), 0) FROM Wallet w WHERE w.asset.id = :assetId")
     BigDecimal sumBalanceByAssetId(@Param("assetId") Long assetId);
 
