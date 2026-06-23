@@ -32,7 +32,7 @@ export function TopNav() {
   
   useEffect(() => {
     const loadUserProfile = async () => {
-      const savedId = localStorage.getItem("currentUserId") || "49"
+      const savedId = localStorage.getItem("tokit_userId") || "1"
       try {
         const data = await fetchApi<MyPageUserResponse>(`/api/users/${savedId}/mypage`)
         if (data && data.user) {

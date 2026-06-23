@@ -6,7 +6,7 @@ import { toast } from 'sonner'
 
 export default function SettingsPage() {
   const [showApiKey, setShowApiKey] = useState(false)
-  const [currentUserId, setCurrentUserId] = useState('49')
+  const [currentUserId, setCurrentUserId] = useState('1')
   const [apiKey] = useState('tk_live_51Nzh1D2e82f10b7f8e8112c3...')
 
   useEffect(() => {
