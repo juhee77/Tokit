@@ -2,6 +2,7 @@ package com.tokit.domain.trade.controller;
 
 import com.tokit.domain.trade.entity.Trade;
 import com.tokit.domain.trade.service.TradeService;
+import com.tokit.domain.trade.dto.CandleResponse;
 import com.tokit.global.dto.ApiResponse;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -51,6 +52,13 @@ public class TradeController {
         List<TradeResponse> list = tradeService.getTradesByAsset(symbol).stream()
                 .map(TradeResponse::from)
                 .toList();
+        return ResponseEntity.ok(ApiResponse.success(list));
+    }
+
+    @GetMapping("/asset/{symbol}/candles")
+    @Operation(summary = "자산별 1분 단위 캔들스틱 시세 조회", description = "특정 자산 심볼의 1분 단위 OHLCV 시세 목록을 조회합니다.")
+    public ResponseEntity<ApiResponse<List<CandleResponse>>> getCandlesBySymbol(@PathVariable("symbol") String symbol) {
+        List<CandleResponse> list = tradeService.getCandlesBySymbol(symbol);
         return ResponseEntity.ok(ApiResponse.success(list));
     }
 

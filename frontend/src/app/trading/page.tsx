@@ -4,6 +4,7 @@ import { useState, useEffect, Suspense, useCallback } from "react"
 import { useSearchParams } from "next/navigation"
 import { Orderbook } from "@/components/sto/orderbook"
 import { OrderForm } from "@/components/sto/order-form"
+import { CandlestickChart } from "@/components/sto/candlestick-chart"
 import { cn } from "@/lib/utils"
 import { TrendingUp, TrendingDown, Activity, ChevronDown } from "lucide-react"
 
@@ -278,7 +279,70 @@ function TradingContent() {
 
       {/* Main Trading Area */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-4">
-        {/* Orderbook */}
+        {/* Left Section (8 cols) */}
+        <div className="lg:col-span-8 space-y-4">
+          {/* Candlestick Chart */}
+          <CandlestickChart symbol={selectedSymbol} currentPrice={tokenStats.currentPrice} />
+          
+          {/* Sub-grid: OrderForm & Recent Trades */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <OrderForm
+              symbol={selectedSymbol}
+              currentPrice={tokenStats.currentPrice}
+              selectedPrice={selectedPrice}
+              availableBalance={availableBalance}
+              availableTokens={availableTokens}
+              onOrderSubmit={() => loadWallets(userId)}
+            />
+            
+            <div className="bg-card border border-outline-variant rounded shadow-sm h-full flex flex-col">
+              <div className="p-4 border-b border-outline-variant flex items-center gap-2">
+                <Activity className="h-4 w-4 text-secondary" />
+                <h3 className="font-semibold text-foreground">최근 체결</h3>
+              </div>
+              
+              {/* Header */}
+              <div className="grid grid-cols-3 text-label-caps text-muted-foreground px-4 py-2 border-b border-surface-container-highest">
+                <span>가격</span>
+                <span className="text-right">수량</span>
+                <span className="text-right">시간</span>
+              </div>
+
+              {/* Trades */}
+              <div className="max-h-[300px] overflow-auto flex-1">
+                {recentTrades.map((trade) => {
+                  const date = new Date(trade.createdAt);
+                  const isGain = trade.price >= tokenStats.currentPrice;
+                  return (
+                    <div
+                      key={trade.id}
+                      className="grid grid-cols-3 text-sm px-4 py-1.5 hover:bg-surface-container-low transition-colors"
+                    >
+                      <span className={cn(
+                        "font-mono",
+                        isGain ? "text-gain" : "text-loss"
+                      )}>
+                        {trade.price.toLocaleString()}
+                      </span>
+                      <span className="text-right font-mono text-foreground">
+                        {trade.quantity.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 4 })}
+                      </span>
+                      <span className="text-right text-muted-foreground text-xs">
+                        {date.toLocaleTimeString("ko-KR", {
+                          hour: "2-digit",
+                          minute: "2-digit",
+                          second: "2-digit",
+                        })}
+                      </span>
+                    </div>
+                  )
+                })}
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Right Section: Orderbook (4 cols) */}
         <div className="lg:col-span-4">
           <Orderbook 
             symbol={selectedSymbol} 
@@ -287,67 +351,6 @@ function TradingContent() {
             priceChangePercent={tokenStats.changePercent}
             onPriceSelect={setSelectedPrice}
           />
-        </div>
-
-        {/* Order Form */}
-        <div className="lg:col-span-4">
-          <OrderForm
-            symbol={selectedSymbol}
-            currentPrice={tokenStats.currentPrice}
-            selectedPrice={selectedPrice}
-            availableBalance={availableBalance}
-            availableTokens={availableTokens}
-            onOrderSubmit={() => loadWallets(userId)}
-          />
-        </div>
-
-        {/* Recent Trades */}
-        <div className="lg:col-span-4">
-          <div className="bg-card border border-outline-variant rounded shadow-sm h-full">
-            <div className="p-4 border-b border-outline-variant flex items-center gap-2">
-              <Activity className="h-4 w-4 text-secondary" />
-              <h3 className="font-semibold text-foreground">최근 체결</h3>
-            </div>
-            
-            {/* Header */}
-            <div className="grid grid-cols-3 text-label-caps text-muted-foreground px-4 py-2 border-b border-surface-container-highest">
-              <span>가격</span>
-              <span className="text-right">수량</span>
-              <span className="text-right">시간</span>
-            </div>
-
-            {/* Trades */}
-            <div className="max-h-[400px] md:max-h-[500px] overflow-auto">
-              {recentTrades.map((trade) => {
-                const date = new Date(trade.createdAt);
-                // MVP 스타일로 색상 지정 (임시로 변동성에 따라)
-                const isGain = trade.price >= tokenStats.currentPrice;
-                return (
-                  <div
-                    key={trade.id}
-                    className="grid grid-cols-3 text-sm px-4 py-1.5 hover:bg-surface-container-low transition-colors"
-                  >
-                    <span className={cn(
-                      "font-mono",
-                      isGain ? "text-gain" : "text-loss"
-                    )}>
-                      {trade.price.toLocaleString()}
-                    </span>
-                    <span className="text-right font-mono text-foreground">
-                      {trade.quantity.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 4 })}
-                    </span>
-                    <span className="text-right text-muted-foreground text-xs">
-                      {date.toLocaleTimeString("ko-KR", {
-                        hour: "2-digit",
-                        minute: "2-digit",
-                        second: "2-digit",
-                      })}
-                    </span>
-                  </div>
-                )
-              })}
-            </div>
-          </div>
         </div>
       </div>
     </div>

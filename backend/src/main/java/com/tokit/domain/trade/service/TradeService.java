@@ -2,6 +2,7 @@ package com.tokit.domain.trade.service;
 
 import com.tokit.domain.trade.entity.Trade;
 import com.tokit.domain.trade.repository.TradeRepository;
+import com.tokit.domain.trade.dto.CandleResponse;
 import com.tokit.domain.order.entity.Order;
 import com.tokit.domain.order.repository.OrderRepository;
 import com.tokit.domain.asset.entity.Asset;
@@ -165,5 +166,11 @@ public class TradeService {
                 removeEmitter(trade.getAssetSymbol(), emitter);
             }
         }
+    }
+
+    public List<CandleResponse> getCandlesBySymbol(String symbol) {
+        return tradeRepository.findCandlesBySymbol(symbol).stream()
+                .map(CandleResponse::from)
+                .toList();
     }
 }
