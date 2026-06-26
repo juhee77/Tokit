@@ -1,8 +1,9 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { cn } from "@/lib/utils"
-import { Wallet, Lock, ArrowUpRight, ArrowDownRight, X, ArrowRight, Building2 } from "lucide-react"
+import { Wallet, Lock, ArrowUpRight, ArrowDownRight, X, ArrowRight, Building2, Loader2 } from "lucide-react"
+import { fetchApi } from "@/lib/api"
 
 interface AssetData {
   totalBalance: number
@@ -121,17 +122,91 @@ const mockOrders: OrderHistory[] = [
   },
 ]
 
-const statusConfig = {
-  pending: { label: "미체결", className: "border-warning text-warning bg-warning/10" },
-  partial: { label: "부분 체결", className: "border-secondary text-secondary bg-secondary/10" },
-  filled: { label: "완전 체결", className: "border-green-600 text-green-600 bg-green-50" },
-  cancelled: { label: "취소됨", className: "border-outline text-muted-foreground bg-surface-container" },
+const tokenMetadata: Record<string, { name: string; currentPrice: number; averagePrice: number }> = {
+  HDYT: { name: "홍대 청년주택 제1호", currentPrice: 5000, averagePrice: 5000 },
+  GNPM: { name: "서울 강남 프라임 오피스", currentPrice: 10000, averagePrice: 10000 },
+  BSND: { name: "부산 해운대 리조트", currentPrice: 7800, averagePrice: 8500 },
+  JJIS: { name: "제주 물류센터", currentPrice: 12300, averagePrice: 12000 },
 }
 
 export function WalletHistory() {
-  const [assets] = useState<AssetData>(mockAssets)
-  const [orders] = useState<OrderHistory[]>(mockOrders)
+  const [assets, setAssets] = useState<AssetData>(mockAssets)
+  const [orders, setOrders] = useState<OrderHistory[]>(mockOrders)
   const [activeTab, setActiveTab] = useState<"assets" | "orders">("assets")
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    let savedId = 1
+    if (typeof window !== "undefined") {
+      const raw = localStorage.getItem("tokit_userId")
+      if (raw) savedId = parseInt(raw, 10)
+    }
+
+    const loadWalletData = async () => {
+      setLoading(true)
+      try {
+        const res = await fetchApi<any>(`/api/users/${savedId}/mypage`)
+        if (res && res.wallets) {
+          const krwWallet = res.wallets.find((w: any) => w.assetSymbol === "KRW" || !w.assetSymbol)
+          const availableBalance = krwWallet ? krwWallet.balance : 0
+          const lockedBalance = krwWallet ? krwWallet.lockedBalance : 0
+          
+          const tokenHoldings: TokenHolding[] = res.wallets
+            .filter((w: any) => w.assetSymbol && w.assetSymbol !== "KRW")
+            .map((w: any) => {
+              const symbol = w.assetSymbol
+              const meta = tokenMetadata[symbol] || { name: `${symbol} 토큰증권`, currentPrice: 10000, averagePrice: 10000 }
+              const quantity = w.balance + w.lockedBalance
+              const value = quantity * meta.currentPrice
+              const changePercent = symbol === "BSND" ? -8.24 : symbol === "HDYT" ? 1.2 : symbol === "JJIS" ? 2.5 : symbol === "GNPM" ? 25.0 : 0.0
+              const change = value * (changePercent / (100 + changePercent))
+              
+              return {
+                symbol,
+                name: meta.name,
+                quantity,
+                averagePrice: meta.averagePrice,
+                currentPrice: meta.currentPrice,
+                value,
+                change,
+                changePercent
+              }
+            })
+
+          const totalTokenValue = tokenHoldings.reduce((sum, t) => sum + t.value, 0)
+          
+          setAssets({
+            totalBalance: availableBalance + lockedBalance,
+            availableBalance,
+            lockedBalance,
+            totalTokenValue,
+            tokens: tokenHoldings
+          })
+        }
+        
+        if (res && res.orders) {
+          const mappedOrders: OrderHistory[] = res.orders.map((o: any) => ({
+            id: o.id.toString(),
+            symbol: o.assetSymbol,
+            side: o.orderType.toLowerCase() as "buy" | "sell",
+            type: "limit",
+            price: o.price,
+            quantity: o.quantity,
+            filledQuantity: o.quantity - o.remainingQuantity,
+            status: o.status === "OPEN" ? "pending" : o.status === "PARTIAL" ? "partial" : o.status === "FILLED" ? "filled" : "cancelled",
+            createdAt: new Date(o.createdAt)
+          }))
+          setOrders(mappedOrders)
+        }
+      } catch (e) {
+        console.error("Failed to fetch wallet page data:", e)
+      } finally {
+        setLoading(false)
+      }
+    }
+
+    loadWalletData()
+  }, [])
 
   const formatKRW = (value: number) => {
     if (Math.abs(value) >= 100000000) {
@@ -152,6 +227,22 @@ export function WalletHistory() {
     if (minutes < 60) return `${minutes}분 전`
     if (hours < 24) return `${hours}시간 전`
     return date.toLocaleDateString("ko-KR")
+  }
+
+  if (loading) {
+    return (
+      <div className="flex-grow flex flex-col items-center justify-center py-20 text-slate-400 gap-3">
+        <Loader2 className="h-8 w-8 animate-spin text-secondary" />
+        <p className="text-sm font-semibold font-sans">자산 및 보유 토큰 로딩 중...</p>
+      </div>
+    )
+  }
+
+  const statusConfig = {
+    pending: { label: "미체결", className: "border-warning text-warning bg-warning/10" },
+    partial: { label: "부분 체결", className: "border-secondary text-secondary bg-secondary/10" },
+    filled: { label: "완전 체결", className: "border-green-600 text-green-600 bg-green-50" },
+    cancelled: { label: "취소됨", className: "border-outline text-muted-foreground bg-surface-container" },
   }
 
   return (
