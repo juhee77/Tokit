@@ -9,6 +9,8 @@ import com.tokit.domain.wallet.repository.WalletRepository;
 import com.tokit.global.exception.BusinessException;
 import com.tokit.global.exception.ErrorCode;
 import com.tokit.infra.blockchain.ContractService;
+import com.tokit.domain.issuer.entity.Issuer;
+import com.tokit.domain.issuer.repository.IssuerRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -26,17 +28,38 @@ public class AssetService {
     private final UserRepository userRepository;
     private final WalletRepository walletRepository;
     private final ContractService contractService;
+    private final IssuerRepository issuerRepository;
 
     @Transactional
-    public Asset registerAsset(String symbol, String name, String contractAddress, BigDecimal totalSupply) {
+    public Asset registerAsset(String symbol, String name, String contractAddress, BigDecimal totalSupply,
+                                BigDecimal issuePrice, String status, Long issuerId) {
         if (assetRepository.findBySymbol(symbol).isPresent()) {
             throw new BusinessException("Symbol already exists", ErrorCode.INVALID_INPUT_VALUE);
         }
+        
+        Issuer issuer;
+        if (issuerId != null) {
+            issuer = issuerRepository.findById(issuerId)
+                    .orElseThrow(() -> new BusinessException("Issuer not found", ErrorCode.INVALID_INPUT_VALUE));
+        } else {
+            issuer = issuerRepository.findAll().stream().findFirst()
+                    .orElseGet(() -> issuerRepository.save(Issuer.builder()
+                            .companyName("서울랜드트러스트")
+                            .bizRegNo("123-45-67890")
+                            .build()));
+        }
+        
+        BigDecimal resolvedPrice = issuePrice != null ? issuePrice : BigDecimal.valueOf(10000);
+        String resolvedStatus = status != null ? status : "청약중";
+
         Asset asset = Asset.builder()
                 .symbol(symbol)
                 .name(name)
                 .contractAddress(contractAddress)
                 .totalSupply(totalSupply)
+                .issuer(issuer)
+                .issuePrice(resolvedPrice)
+                .status(resolvedStatus)
                 .build();
         return assetRepository.save(asset);
     }

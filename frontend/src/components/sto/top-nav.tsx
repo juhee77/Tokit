@@ -20,6 +20,7 @@ const breadcrumbMap: Record<string, string[]> = {
   '/mypage': ['Portfolio', 'My Page'],
   '/settings': ['Portfolio', 'Settings'],
   '/notifications': ['Portfolio', 'Notifications'],
+  '/admin': ['Admin', 'Backoffice'],
   '/markets': ['Markets', 'All Assets'],
   '/trading': ['Trading', 'Exchange'],
   '/community': ['Community'],

@@ -14,7 +14,8 @@ import {
   Plus,
   ChevronDown,
   Menu,
-  X
+  X,
+  ShieldAlert
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
@@ -49,6 +50,7 @@ const navItems = [
 const footerItems = [
   { label: 'Support', icon: HelpCircle, href: '/support' },
   { label: 'API', icon: Code, href: '/api-docs' },
+  { label: 'Admin', icon: ShieldAlert, href: '/admin' },
 ]
 
 export function Sidebar() {

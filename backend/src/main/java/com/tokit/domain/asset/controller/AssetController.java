@@ -29,7 +29,10 @@ public class AssetController {
         @NotBlank(message = "Symbol is required") String symbol,
         @NotBlank(message = "Name is required") String name,
         @NotBlank(message = "Contract Address is required") String contractAddress,
-        @NotNull(message = "Total Supply is required") @Positive(message = "Total supply must be positive") BigDecimal totalSupply
+        @NotNull(message = "Total Supply is required") @Positive(message = "Total supply must be positive") BigDecimal totalSupply,
+        BigDecimal issuePrice,
+        String status,
+        Long issuerId
     ) {}
 
     public record AssetResponse(
@@ -66,7 +69,15 @@ public class AssetController {
     @PostMapping
     @Operation(summary = "토큰증권 자산 등록", description = "기초자산의 심볼, 이름, 스마트 컨트랙트 주소, 총 발행량을 입력하여 자산을 등록합니다.")
     public ResponseEntity<ApiResponse<AssetResponse>> registerAsset(@RequestBody @Valid RegisterAssetRequest request) {
-        Asset asset = assetService.registerAsset(request.symbol(), request.name(), request.contractAddress(), request.totalSupply());
+        Asset asset = assetService.registerAsset(
+                request.symbol(),
+                request.name(),
+                request.contractAddress(),
+                request.totalSupply(),
+                request.issuePrice(),
+                request.status(),
+                request.issuerId()
+        );
         return ResponseEntity.ok(ApiResponse.success(AssetResponse.from(asset, BigDecimal.ZERO, 0)));
     }
 

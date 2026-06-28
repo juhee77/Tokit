@@ -11,6 +11,7 @@ import jakarta.validation.constraints.NotBlank;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
+import java.util.List;
 
 @Tag(name = "01. User (사용자)", description = "회원가입 및 사용자 정보 조회 API")
 @RestController
@@ -60,5 +61,14 @@ public class UserController {
     ) {
         User user = userService.updateKycStatus(id, kycStatus);
         return ResponseEntity.ok(ApiResponse.success(UserResponse.from(user)));
+    }
+
+    @GetMapping
+    @Operation(summary = "전체 사용자 조회", description = "시스템에 등록된 전체 사용자 리스트를 조회합니다.")
+    public ResponseEntity<ApiResponse<List<UserResponse>>> getAllUsers() {
+        List<UserResponse> list = userService.getAllUsers().stream()
+                .map(UserResponse::from)
+                .toList();
+        return ResponseEntity.ok(ApiResponse.success(list));
     }
 }
