@@ -13,11 +13,12 @@ import {
 } from "recharts"
 import { useTradeStore } from "@/stores/useTradeStore"
 import { fetchApi } from "@/lib/api"
-import { Loader2, TrendingUp, BarChart2 } from "lucide-react"
+import { Loader2, BarChart2 } from "lucide-react"
+import { cn } from "@/lib/utils"
 
 interface CandleData {
-  time: string      // Format: "HH:mm"
-  fullTime: string  // Format: "YYYY-MM-DD HH:mm"
+  time: string      // Display label (e.g. "HH:mm", "MM-DD", "YYYY-MM")
+  fullTime: string  // Detailed time label
   open: number
   high: number
   low: number
@@ -42,12 +43,21 @@ interface CandlestickChartProps {
   currentPrice: number
 }
 
+const intervals = [
+  { label: "1분", value: "1m" },
+  { label: "10분", value: "10m" },
+  { label: "1시간", value: "1h" },
+  { label: "1일", value: "1d" },
+  { label: "1달", value: "30d" },
+]
+
 export function CandlestickChart({ symbol, currentPrice }: CandlestickChartProps) {
   const [dbCandles, setDbCandles] = useState<ApiCandle[]>([])
   const [loading, setLoading] = useState(true)
+  const [selectedInterval, setSelectedInterval] = useState<string>("1m")
   const recentTrades = useTradeStore((state) => state.recentTrades)
 
-  // 1. Fetch DB historical candles on symbol change
+  // 1. Fetch DB historical 1m candles on symbol change
   useEffect(() => {
     async function loadCandles() {
       setLoading(true)
@@ -64,25 +74,85 @@ export function CandlestickChart({ symbol, currentPrice }: CandlestickChartProps
     loadCandles()
   }, [symbol])
 
-  // 2. Generate fallback rich mock history if DB has no historical trade candles
-  const mockHistory = useMemo(() => {
-    if (dbCandles.length >= 5) return [] // Use DB candles if available
+  // Get active interval label
+  const selectedIntervalLabel = useMemo(() => {
+    return intervals.find(i => i.value === selectedInterval)?.label || "1분"
+  }, [selectedInterval])
 
+  // 2. Aggregate 1m DB candles into selected interval
+  const aggregatedDbCandles = useMemo(() => {
+    if (selectedInterval === "1m" || dbCandles.length === 0) {
+      return dbCandles
+    }
+
+    const groups: Record<string, ApiCandle[]> = {}
+    dbCandles.forEach(c => {
+      let key = c.time.slice(0, 16) // "YYYY-MM-DDTHH:mm"
+      if (selectedInterval === "10m") {
+        key = key.slice(0, 15) + "0"
+      } else if (selectedInterval === "1h") {
+        key = key.slice(0, 13) + ":00"
+      } else if (selectedInterval === "1d") {
+        key = key.slice(0, 10)
+      } else if (selectedInterval === "30d") {
+        key = key.slice(0, 7)
+      }
+
+      if (!groups[key]) groups[key] = []
+      groups[key].push(c)
+    })
+
+    return Object.keys(groups).sort().map(key => {
+      const group = groups[key]
+      const open = group[0].open
+      const close = group[group.length - 1].close
+      const high = Math.max(...group.map(c => c.high))
+      const low = Math.min(...group.map(c => c.low))
+      const volume = group.reduce((sum, c) => sum + c.volume, 0)
+      
+      const isoTime = selectedInterval === "30d" 
+        ? key + "-01T00:00:00" 
+        : selectedInterval === "1d" 
+        ? key + "T00:00:00" 
+        : key + ":00"
+
+      return {
+        time: isoTime,
+        open,
+        high,
+        low,
+        close,
+        volume
+      }
+    })
+  }, [dbCandles, selectedInterval])
+
+  // 3. Generate fallback rich mock history based on selected interval
+  const mockHistory = useMemo(() => {
     const history: ApiCandle[] = []
     let price = currentPrice || 12500
     const now = new Date()
+    
+    let stepMs = 60 * 1000
+    let count = 30
+    
+    if (selectedInterval === "10m") stepMs = 10 * 60 * 1000
+    else if (selectedInterval === "1h") stepMs = 60 * 60 * 1000
+    else if (selectedInterval === "1d") stepMs = 24 * 60 * 60 * 1000
+    else if (selectedInterval === "30d") {
+      stepMs = 30 * 24 * 60 * 60 * 1000
+      count = 12
+    }
 
-    // Generate 30 minutes of historical candles
-    for (let i = 29; i >= 0; i--) {
-      const time = new Date(now.getTime() - i * 60 * 1000)
+    for (let i = count - 1; i >= 0; i--) {
+      const time = new Date(now.getTime() - i * stepMs)
       const dateStr = time.toISOString().split(".")[0] // YYYY-MM-DDTHH:mm:ss
 
-      // Apply a realistic random walk
-      const change = (Math.random() - 0.48) * (price * 0.008) // Slight upward bias
+      const change = (Math.random() - 0.48) * (price * 0.012)
       const open = price
       const close = price + change
-      const high = Math.max(open, close) + Math.random() * (price * 0.004)
-      const low = Math.min(open, close) - Math.random() * (price * 0.004)
+      const high = Math.max(open, close) + Math.random() * (price * 0.005)
+      const low = Math.min(open, close) - Math.random() * (price * 0.005)
       const volume = Math.floor(Math.random() * 800) + 100
 
       history.push({
@@ -96,21 +166,36 @@ export function CandlestickChart({ symbol, currentPrice }: CandlestickChartProps
       price = close
     }
     return history
-  }, [dbCandles, currentPrice, symbol])
+  }, [currentPrice, selectedInterval])
 
-  // 3. Aggregate real-time trades from store by 1-minute intervals
+  // 4. Aggregate real-time trades from store by interval
   const realtimeCandles = useMemo(() => {
     if (recentTrades.length === 0) return {}
 
     const buckets: Record<string, any[]> = {}
 
-    // Group trades by their YYYY-MM-DDTHH:mm bucket
     recentTrades.forEach(trade => {
       try {
         const date = new Date(trade.createdAt)
-        // Truncate to the minute: YYYY-MM-DDTHH:mm:00
-        const bucketKey = new Date(date.getFullYear(), date.getMonth(), date.getDate(), date.getHours(), date.getMinutes())
-          .toISOString().split(".")[0].slice(0, 16) // "YYYY-MM-DDTHH:mm"
+        let bucketKey = ""
+        
+        if (selectedInterval === "1m") {
+          bucketKey = new Date(date.getFullYear(), date.getMonth(), date.getDate(), date.getHours(), date.getMinutes())
+            .toISOString().split(".")[0].slice(0, 16)
+        } else if (selectedInterval === "10m") {
+          const min = Math.floor(date.getMinutes() / 10) * 10
+          bucketKey = new Date(date.getFullYear(), date.getMonth(), date.getDate(), date.getHours(), min)
+            .toISOString().split(".")[0].slice(0, 16)
+        } else if (selectedInterval === "1h") {
+          bucketKey = new Date(date.getFullYear(), date.getMonth(), date.getDate(), date.getHours(), 0)
+            .toISOString().split(".")[0].slice(0, 16)
+        } else if (selectedInterval === "1d") {
+          bucketKey = new Date(date.getFullYear(), date.getMonth(), date.getDate(), 0, 0)
+            .toISOString().split(".")[0].slice(0, 10)
+        } else if (selectedInterval === "30d") {
+          bucketKey = new Date(date.getFullYear(), date.getMonth(), 1, 0, 0)
+            .toISOString().split(".")[0].slice(0, 7)
+        }
         
         if (!buckets[bucketKey]) {
           buckets[bucketKey] = []
@@ -123,10 +208,8 @@ export function CandlestickChart({ symbol, currentPrice }: CandlestickChartProps
 
     const result: Record<string, ApiCandle> = {}
 
-    // Calculate OHLCV for each minute bucket
     Object.keys(buckets).forEach(bucketTime => {
       const trades = buckets[bucketTime]
-      // Sort trades chronological ascending (oldest first)
       const sorted = [...trades].sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime())
       
       const prices = sorted.map(t => t.price)
@@ -136,8 +219,14 @@ export function CandlestickChart({ symbol, currentPrice }: CandlestickChartProps
       const low = Math.min(...prices)
       const volume = sorted.reduce((sum, t) => sum + t.quantity, 0)
 
+      const isoTime = selectedInterval === "30d" 
+        ? bucketTime + "-01T00:00:00" 
+        : selectedInterval === "1d" 
+        ? bucketTime + "T00:00:00" 
+        : bucketTime + ":00"
+
       result[bucketTime] = {
-        time: bucketTime + ":00",
+        time: isoTime,
         open,
         high,
         low,
@@ -147,25 +236,25 @@ export function CandlestickChart({ symbol, currentPrice }: CandlestickChartProps
     })
 
     return result
-  }, [recentTrades])
+  }, [recentTrades, selectedInterval])
 
-  // 4. Merge all sources: DB candles (or fallback mock) + real-time updates
+  // 5. Merge all sources: DB aggregated (or fallback mock) + real-time updates
   const chartData = useMemo<CandleData[]>(() => {
-    const baseCandles = dbCandles.length >= 5 ? dbCandles : mockHistory
+    const baseCandles = aggregatedDbCandles.length >= 5 ? aggregatedDbCandles : mockHistory
     const mergedMap: Record<string, ApiCandle> = {}
 
-    // Map base candles by YYYY-MM-DDTHH:mm
     baseCandles.forEach(c => {
-      const key = c.time.slice(0, 16) // Extract YYYY-MM-DDTHH:mm
+      let key = c.time.slice(0, 16)
+      if (selectedInterval === "1d") key = c.time.slice(0, 10)
+      else if (selectedInterval === "30d") key = c.time.slice(0, 7)
+      
       mergedMap[key] = c
     })
 
-    // Merge in real-time aggregated candles (will overwrite base candles for matching minutes)
     Object.keys(realtimeCandles).forEach(key => {
       mergedMap[key] = realtimeCandles[key]
     })
 
-    // Convert merged map back to sorted CandleData list
     return Object.keys(mergedMap)
       .sort()
       .map(key => {
@@ -176,12 +265,23 @@ export function CandlestickChart({ symbol, currentPrice }: CandlestickChartProps
         const low = c.low
         const isUp = close >= open
 
-        // Format label timestamp
-        const timePart = key.split("T")[1] || "" // "HH:mm"
+        // Format label timestamp dynamically
+        let displayTime = key.split("T")[1]?.slice(0, 5) || ""
+        if (selectedInterval === "1d") {
+          displayTime = key.slice(5) // MM-DD
+        } else if (selectedInterval === "30d") {
+          displayTime = key.slice(0, 7) // YYYY-MM
+        }
+
+        const fullTimeLabel = selectedInterval === "30d"
+          ? key
+          : selectedInterval === "1d"
+          ? key
+          : key.replace("T", " ")
 
         return {
-          time: timePart,
-          fullTime: key.replace("T", " "),
+          time: displayTime,
+          fullTime: fullTimeLabel,
           open,
           high,
           low,
@@ -192,9 +292,9 @@ export function CandlestickChart({ symbol, currentPrice }: CandlestickChartProps
           isUp
         }
       })
-  }, [dbCandles, mockHistory, realtimeCandles])
+  }, [aggregatedDbCandles, mockHistory, realtimeCandles, selectedInterval])
 
-  // Custom tool-tip component for professional look
+  // Custom tool-tip component
   const CustomTooltip = ({ active, payload }: any) => {
     if (active && payload && payload.length) {
       const data: CandleData = payload[0].payload
@@ -234,7 +334,7 @@ export function CandlestickChart({ symbol, currentPrice }: CandlestickChartProps
     return (
       <div className="h-[400px] w-full bg-card border border-outline-variant rounded flex flex-col items-center justify-center text-slate-400 gap-3">
         <Loader2 className="h-6 w-6 animate-spin text-secondary" />
-        <p className="text-sm font-semibold">실시간 분봉 시세 로딩 중...</p>
+        <p className="text-sm font-semibold">실시간 시세 차트 로딩 중...</p>
       </div>
     )
   }
@@ -242,19 +342,40 @@ export function CandlestickChart({ symbol, currentPrice }: CandlestickChartProps
   return (
     <div className="bg-card border border-outline-variant rounded shadow-sm p-4 space-y-3">
       {/* Title / Chart Header */}
-      <div className="flex justify-between items-center border-b border-outline-variant/60 pb-3">
+      <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center border-b border-outline-variant/60 pb-3 gap-3">
         <div className="flex items-center gap-2">
           <BarChart2 className="w-5 h-5 text-secondary" />
-          <h3 className="font-semibold text-foreground">실시간 분봉 차트 (1m Interval)</h3>
+          <h3 className="font-semibold text-foreground">실시간 시세 차트 ({selectedIntervalLabel})</h3>
         </div>
-        <div className="flex items-center gap-1">
-          <span className="text-[10px] uppercase font-bold tracking-wider text-muted-foreground px-2 py-0.5 border border-outline-variant bg-surface rounded">
-            Live Streaming
-          </span>
-          <span className="flex h-2 w-2 relative">
-            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75"></span>
-            <span className="relative inline-flex rounded-full h-2 w-2 bg-green-500"></span>
-          </span>
+        
+        <div className="flex items-center gap-3">
+          {/* Interval Selector */}
+          <div className="flex bg-surface-container rounded border border-outline-variant p-0.5 text-xs">
+            {intervals.map((item) => (
+              <button
+                key={item.value}
+                onClick={() => setSelectedInterval(item.value)}
+                className={cn(
+                  "px-2.5 py-1 rounded-sm font-semibold transition-colors",
+                  selectedInterval === item.value
+                    ? "bg-secondary text-secondary-foreground"
+                    : "text-muted-foreground hover:text-foreground"
+                )}
+              >
+                {item.label}
+              </button>
+            ))}
+          </div>
+          
+          <div className="flex items-center gap-1">
+            <span className="text-[10px] uppercase font-bold tracking-wider text-muted-foreground px-2 py-0.5 border border-outline-variant bg-surface rounded">
+              Live
+            </span>
+            <span className="flex h-2 w-2 relative">
+              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75"></span>
+              <span className="relative inline-flex rounded-full h-2 w-2 bg-green-500"></span>
+            </span>
+          </div>
         </div>
       </div>
 
@@ -290,7 +411,7 @@ export function CandlestickChart({ symbol, currentPrice }: CandlestickChartProps
             </Bar>
             
             {/* 2. Body Bar (thick block from open to close) */}
-            <Bar dataKey="body" barSize={10}>
+            <Bar dataKey="body" barSize={selectedInterval === "30d" ? 22 : selectedInterval === "1d" ? 14 : 10}>
               {chartData.map((entry, index) => (
                 <Cell key={`body-cell-${index}`} fill={entry.isUp ? "var(--color-gain, #22c55e)" : "var(--color-loss, #ef4444)"} />
               ))}
@@ -301,3 +422,4 @@ export function CandlestickChart({ symbol, currentPrice }: CandlestickChartProps
     </div>
   )
 }
+
