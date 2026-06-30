@@ -21,6 +21,8 @@ const breadcrumbMap: Record<string, string[]> = {
   '/settings': ['Portfolio', 'Settings'],
   '/notifications': ['Portfolio', 'Notifications'],
   '/admin': ['Admin', 'Backoffice'],
+  '/support': ['Support', 'Help Center'],
+  '/api-docs': ['API', 'Developer Portal'],
   '/markets': ['Markets', 'All Assets'],
   '/trading': ['Trading', 'Exchange'],
   '/community': ['Community'],
