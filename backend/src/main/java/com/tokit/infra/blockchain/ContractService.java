@@ -108,7 +108,7 @@ public class ContractService {
             String encodedFunction = FunctionEncoder.encode(function);
             TransactionManager txManager = new RawTransactionManager(web3j, credentials);
             
-            BigInteger gasPrice = web3j.ethGasPrice().send().getGasPrice();
+            BigInteger gasPrice = estimateGasPriceWithBuffer();
             BigInteger gasLimit = BigInteger.valueOf(500_000L);
 
             EthSendTransaction response = txManager.sendTransaction(
@@ -156,7 +156,7 @@ public class ContractService {
             String encodedFunction = FunctionEncoder.encode(function);
             TransactionManager txManager = new RawTransactionManager(web3j, credentials);
             
-            BigInteger gasPrice = web3j.ethGasPrice().send().getGasPrice();
+            BigInteger gasPrice = estimateGasPriceWithBuffer();
             BigInteger gasLimit = BigInteger.valueOf(500_000L);
 
             EthSendTransaction response = txManager.sendTransaction(
@@ -223,7 +223,7 @@ public class ContractService {
 
             TransactionManager txManager = new RawTransactionManager(web3j, credentials);
             
-            BigInteger gasPrice = web3j.ethGasPrice().send().getGasPrice();
+            BigInteger gasPrice = estimateGasPriceWithBuffer();
             BigInteger gasLimit = BigInteger.valueOf(3_000_000L); // 넉넉히 가스 배정
 
             EthSendTransaction response = txManager.sendTransaction(
@@ -300,6 +300,19 @@ public class ContractService {
         } catch (Exception e) {
             log.error("Failed to check on-chain balance on blockchain for address: " + walletAddress, e);
             return BigDecimal.ZERO;
+        }
+    }
+
+    /**
+     * 공개 네트워크(Sepolia 등)의 변동성에 대비한 가스비 안전 버퍼 가산 기능 (15% 할증)
+     */
+    private BigInteger estimateGasPriceWithBuffer() {
+        try {
+            BigInteger rawPrice = web3j.ethGasPrice().send().getGasPrice();
+            return rawPrice.multiply(BigInteger.valueOf(115)).divide(BigInteger.valueOf(100));
+        } catch (Exception e) {
+            log.warn("Failed to fetch dynamic gas price, falling back to 20 Gwei legacy fee", e);
+            return BigInteger.valueOf(20_000_000_000L); 
         }
     }
 }
