@@ -21,6 +21,9 @@ public interface WalletRepository extends JpaRepository<Wallet, Long> {
     // 토큰 자산 지갑 조회를 위한 페이징 메서드 (Batch 용)
     Page<Wallet> findByAssetIsNotNull(Pageable pageable);
 
+    // 특정 토큰 자산 지갑 조회를 위한 페이징 메서드 (배당금 Batch 용)
+    Page<Wallet> findByAsset_IdAndBalanceGreaterThan(Long assetId, BigDecimal balance, Pageable pageable);
+
     // 원화(KRW) 지갑 조회를 위한 메서드 (asset_id IS NULL)
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("SELECT w FROM Wallet w WHERE w.user.id = :userId AND w.asset IS NULL")

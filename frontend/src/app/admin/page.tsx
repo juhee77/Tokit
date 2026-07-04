@@ -52,14 +52,38 @@ interface AssetItem {
   totalInvestors: number
 }
 
+interface DividendPayoutItem {
+  id: number
+  assetId: number
+  assetSymbol: string
+  assetName: string
+  totalDividendAmount: number
+  payoutDate: string
+  status: string
+}
+
+interface DividendDetailItem {
+  id: number
+  userId: number
+  userName: string
+  walletAddress: string
+  shareRatio: number
+  payoutAmount: number
+  status: string
+  errorMessage: string
+}
+
 export default function AdminPage() {
-  const [activeTab, setActiveTab] = useState<"assets" | "kyc" | "reconciliation">("assets")
+  const [activeTab, setActiveTab] = useState<"assets" | "kyc" | "reconciliation" | "dividend">("assets")
   const [loading, setLoading] = useState<boolean>(true)
   
   // Data lists
   const [users, setUsers] = useState<UserItem[]>([])
   const [logs, setLogs] = useState<ReconciliationLogItem[]>([])
   const [assets, setAssets] = useState<AssetItem[]>([])
+  const [dividends, setDividends] = useState<DividendPayoutItem[]>([])
+  const [selectedPayoutId, setSelectedPayoutId] = useState<number | null>(null)
+  const [payoutDetails, setPayoutDetails] = useState<DividendDetailItem[]>([])
 
   // Asset creation form state
   const [assetSymbol, setAssetSymbol] = useState("")
@@ -70,6 +94,12 @@ export default function AdminPage() {
   const [status, setStatus] = useState("청약중")
   const [actionLoading, setActionLoading] = useState(false)
   const [batchRunning, setBatchRunning] = useState(false)
+
+  // Dividend form & detail state
+  const [dividendAssetId, setDividendAssetId] = useState<string>("")
+  const [dividendAmount, setDividendAmount] = useState<string>("")
+  const [dividendActionLoading, setDividendActionLoading] = useState(false)
+  const [detailsLoading, setDetailsLoading] = useState(false)
 
   // 1. Fetch Users List
   const loadUsers = useCallback(async () => {
@@ -103,11 +133,69 @@ export default function AdminPage() {
     }
   }, [])
 
+  // 3.5 Fetch Dividend History List
+  const loadDividends = useCallback(async () => {
+    try {
+      const res = await fetchApi<DividendPayoutItem[]>("/api/admin/dividends")
+      setDividends(res || [])
+    } catch (e: any) {
+      console.error("Failed to load dividends:", e)
+    }
+  }, [])
+
+  const loadPayoutDetails = async (payoutId: number) => {
+    setDetailsLoading(true)
+    setSelectedPayoutId(payoutId)
+    try {
+      const res = await fetchApi<DividendDetailItem[]>(`/api/admin/dividends/${payoutId}/details`)
+      setPayoutDetails(res || [])
+    } catch (e: any) {
+      console.error("Failed to load payout details:", e)
+      toast.error("상세 지급 로그 조회 실패: " + e.message)
+    } finally {
+      setDetailsLoading(false)
+    }
+  }
+
+  const handleRunDividend = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!dividendAssetId || !dividendAmount) {
+      toast.error("발행 자산 및 배당 재원을 올바르게 입력해 주세요.")
+      return
+    }
+
+    setDividendActionLoading(true)
+    try {
+      const amount = parseFloat(dividendAmount.replace(/,/g, ""))
+      toast.info("배당금 분배 배치를 실행합니다...")
+      
+      const res = await fetchApi<DividendPayoutItem>("/api/admin/dividends", {
+        method: "POST",
+        body: JSON.stringify({
+          assetId: parseInt(dividendAssetId),
+          totalDividendAmount: amount
+        })
+      })
+
+      toast.success(`배당금 자동 지급 요청이 등록되었습니다. (상태: ${res.status})`)
+      setDividendAmount("")
+      setDividendAssetId("")
+      
+      // Reload dividend and user balance info
+      await Promise.all([loadDividends(), loadUsers()])
+    } catch (e: any) {
+      console.error("Failed to run dividend distribution:", e)
+      toast.error("배당금 지급 실행 실패: " + e.message)
+    } finally {
+      setDividendActionLoading(false)
+    }
+  }
+
   const loadAllData = useCallback(async () => {
     setLoading(true)
-    await Promise.all([loadUsers(), loadLogs(), loadAssets()])
+    await Promise.all([loadUsers(), loadLogs(), loadAssets(), loadDividends()])
     setLoading(false)
-  }, [loadUsers, loadLogs, loadAssets])
+  }, [loadUsers, loadLogs, loadAssets, loadDividends])
 
   useEffect(() => {
     loadAllData()
@@ -265,6 +353,21 @@ export default function AdminPage() {
           >
             <AlertTriangle className="w-4 h-4" />
             정합성 대사 감사 ({logs.length})
+          </button>
+          <button 
+            onClick={() => {
+              setActiveTab("dividend")
+              setSelectedPayoutId(null)
+            }}
+            className={cn(
+              "flex-1 px-4 py-3 text-sm font-semibold border-b-2 transition-all flex items-center justify-center gap-2",
+              activeTab === "dividend"
+                ? "border-secondary text-secondary bg-surface-container-low"
+                : "border-transparent text-muted-foreground hover:text-foreground"
+            )}
+          >
+            <TrendingUp className="w-4 h-4" />
+            배당금 지급 관리 ({dividends.length})
           </button>
         </div>
 
@@ -558,6 +661,194 @@ export default function AdminPage() {
                   </tbody>
                 </table>
               </div>
+            </div>
+          </div>
+        )}
+
+        {/* Tab 4: Dividend Payout Management */}
+        {activeTab === "dividend" && (
+          <div className="p-4 md:p-6 grid grid-cols-1 lg:grid-cols-12 gap-6">
+            {/* Form */}
+            <div className="lg:col-span-4 bg-surface-container-low border border-outline-variant p-5 rounded space-y-4 shadow-inner">
+              <div className="flex items-center gap-1.5 border-b border-outline-variant/60 pb-2 mb-3">
+                <TrendingUp className="w-5 h-5 text-secondary" />
+                <h3 className="font-semibold text-sm text-foreground">배당금 분배 실행</h3>
+              </div>
+              
+              <form onSubmit={handleRunDividend} className="space-y-4">
+                <div>
+                  <label className="text-[11px] font-bold text-muted-foreground uppercase tracking-wider block mb-1">대상 STO 자산</label>
+                  <select 
+                    value={dividendAssetId}
+                    onChange={(e) => setDividendAssetId(e.target.value)}
+                    className="w-full px-3 py-2 bg-surface border border-outline-variant rounded text-sm text-foreground focus:outline-none focus:border-secondary focus:ring-1 focus:ring-secondary/20"
+                    required
+                  >
+                    <option value="">선택해 주세요...</option>
+                    {assets.map((asset) => (
+                      <option key={asset.id} value={asset.id}>
+                        {asset.name} ({asset.symbol})
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="text-[11px] font-bold text-muted-foreground uppercase tracking-wider block mb-1">총 배당 재원 (원화 KRW)</label>
+                  <div className="relative">
+                    <input 
+                      type="text" 
+                      placeholder="예: 10,000,000"
+                      value={dividendAmount}
+                      onChange={(e) => setDividendAmount(e.target.value.replace(/[^0-9]/g, "").replace(/\B(?=(\d{3})+(?!\d))/g, ","))}
+                      className="w-full pl-3 pr-10 py-2 bg-surface border border-outline-variant rounded text-sm text-foreground focus:outline-none focus:border-secondary focus:ring-1 focus:ring-secondary/20 font-mono"
+                      required
+                    />
+                    <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs font-bold text-muted-foreground">KRW</span>
+                  </div>
+                </div>
+                
+                <button 
+                  type="submit"
+                  className="w-full mt-2 bg-primary text-primary-foreground flex items-center justify-center py-2.5 px-4 rounded text-sm font-semibold hover:bg-primary/90 transition-colors disabled:opacity-50"
+                  disabled={dividendActionLoading}
+                >
+                  {dividendActionLoading ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Play className="w-4 h-4 mr-2" />}
+                  배당 자동 분배 시작
+                </button>
+              </form>
+            </div>
+
+            {/* List and Details */}
+            <div className="lg:col-span-8 space-y-6">
+              {/* Dividend History Table */}
+              <div className="border border-outline-variant rounded overflow-hidden">
+                <div className="bg-surface-container-low px-4 py-3 border-b border-outline-variant flex justify-between items-center">
+                  <h4 className="font-semibold text-sm text-foreground">배당금 지급 이력</h4>
+                  <span className="text-[10px] bg-secondary/10 text-secondary border border-secondary/20 px-2 py-0.5 rounded font-bold font-mono">
+                    {dividends.length} Records
+                  </span>
+                </div>
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left border-collapse min-w-[500px]">
+                    <thead>
+                      <tr className="border-b border-outline-variant bg-surface text-label-caps text-muted-foreground text-xs">
+                        <th className="py-3 px-4 font-semibold">지급일</th>
+                        <th className="py-3 px-4 font-semibold">자산명 / 심볼</th>
+                        <th className="py-3 px-4 font-semibold text-right">총 배당액</th>
+                        <th className="py-3 px-4 font-semibold text-center">상태</th>
+                        <th className="py-3 px-4 font-semibold text-center">작업</th>
+                      </tr>
+                    </thead>
+                    <tbody className="text-sm divide-y divide-outline-variant/60">
+                      {dividends.length === 0 ? (
+                        <tr>
+                          <td colSpan={5} className="py-10 text-center text-muted-foreground">
+                            배당금 지급 이력이 존재하지 않습니다.
+                          </td>
+                        </tr>
+                      ) : (
+                        dividends.map((div) => (
+                          <tr key={div.id} className={cn("hover:bg-surface-container-low transition-colors", selectedPayoutId === div.id && "bg-secondary/[0.03]")}>
+                            <td className="py-3 px-4 text-xs text-muted-foreground font-mono">{formatDateTime(div.payoutDate)}</td>
+                            <td className="py-3 px-4">
+                              <p className="font-semibold text-foreground">{div.assetName}</p>
+                              <code className="text-xs text-muted-foreground font-mono">{div.assetSymbol}</code>
+                            </td>
+                            <td className="py-3 px-4 text-right font-mono text-foreground font-bold">{formatKRW(div.totalDividendAmount)}</td>
+                            <td className="py-3 px-4 text-center">
+                              <span className={cn(
+                                "px-2 py-0.5 text-[10px] uppercase font-bold tracking-wider rounded border",
+                                div.status === "COMPLETED"
+                                  ? "border-green-500 text-green-500 bg-green-500/10"
+                                  : div.status === "PENDING" || div.status === "PROCESSING"
+                                  ? "border-warning text-warning bg-warning/10"
+                                  : "border-red-500 text-red-500 bg-red-500/10"
+                              )}>
+                                {div.status}
+                              </span>
+                            </td>
+                            <td className="py-3 px-4 text-center">
+                              <button
+                                onClick={() => loadPayoutDetails(div.id)}
+                                className="px-2 py-1 text-xs border border-outline hover:border-secondary hover:text-secondary rounded transition-colors"
+                              >
+                                지급상세
+                              </button>
+                            </td>
+                          </tr>
+                        ))
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+
+              {/* Selected Payout Detail Logs */}
+              {selectedPayoutId && (
+                <div className="border border-outline-variant rounded overflow-hidden">
+                  <div className="bg-surface-container-low px-4 py-3 border-b border-outline-variant flex justify-between items-center">
+                    <h4 className="font-semibold text-sm text-foreground">
+                      지급 상세 로그 (배당 ID: {selectedPayoutId})
+                    </h4>
+                    <button 
+                      onClick={() => setSelectedPayoutId(null)}
+                      className="text-xs text-muted-foreground hover:text-foreground font-semibold"
+                    >
+                      상세 닫기
+                    </button>
+                  </div>
+                  {detailsLoading ? (
+                    <div className="py-10 text-center text-muted-foreground flex flex-col items-center gap-2">
+                      <Loader2 className="w-6 h-6 animate-spin text-secondary" />
+                      <span className="text-xs">상세 지급 상태 로딩 중...</span>
+                    </div>
+                  ) : (
+                    <div className="overflow-x-auto">
+                      <table className="w-full text-left border-collapse min-w-[600px]">
+                        <thead>
+                          <tr className="border-b border-outline-variant bg-surface text-label-caps text-muted-foreground text-xs">
+                            <th className="py-2.5 px-4 font-semibold">주주명</th>
+                            <th className="py-2.5 px-4 font-semibold">지갑 주소</th>
+                            <th className="py-2.5 px-4 font-semibold text-right">지분 비율</th>
+                            <th className="py-2.5 px-4 font-semibold text-right">지급액 (KRW)</th>
+                            <th className="py-2.5 px-4 font-semibold text-center">지급 상태</th>
+                          </tr>
+                        </thead>
+                        <tbody className="text-xs divide-y divide-outline-variant/60">
+                          {payoutDetails.length === 0 ? (
+                            <tr>
+                              <td colSpan={5} className="py-6 text-center text-muted-foreground">
+                                상세 주주 지급 내역이 존재하지 않거나 처리 전입니다.
+                              </td>
+                            </tr>
+                          ) : (
+                            payoutDetails.map((det) => (
+                              <tr key={det.id} className="hover:bg-surface-container-low transition-colors">
+                                <td className="py-2 px-4 font-semibold text-foreground">{det.userName}</td>
+                                <td className="py-2 px-4 font-mono text-muted-foreground">{det.walletAddress.slice(0, 10)}...{det.walletAddress.slice(-8)}</td>
+                                <td className="py-2 px-4 text-right font-mono text-foreground">{(det.shareRatio * 100).toFixed(4)}%</td>
+                                <td className="py-2 px-4 text-right font-mono text-foreground font-semibold">{det.payoutAmount.toLocaleString()} 원</td>
+                                <td className="py-2 px-4 text-center">
+                                  <span className={cn(
+                                    "px-1.5 py-0.5 text-[9px] font-bold rounded border",
+                                    det.status === "SUCCESS"
+                                      ? "border-green-500/30 text-green-500 bg-green-500/5"
+                                      : det.status === "PENDING"
+                                      ? "border-warning/30 text-warning bg-warning/5"
+                                      : "border-red-500/30 text-red-500 bg-red-500/5"
+                                  )}>
+                                    {det.status}
+                                  </span>
+                                </td>
+                              </tr>
+                            ))
+                          )}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
           </div>
         )}

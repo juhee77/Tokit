@@ -62,13 +62,18 @@ class AssetSubscriptionIntegrationTest {
     void setUp() {
         mockMvc = MockMvcBuilders.webAppContextSetup(webApplicationContext).build();
 
-        // 1. 테스트 유저 생성
-        testUser = userRepository.save(User.builder()
-                .name("김토킷")
-                .email("test-investor@tokit.com")
-                .walletAddress("0x70997970C51812dc3A010C7d01b50e0d17dc79C8")
-                .kycStatus(true)
-                .build());
+        // 1. 테스트 유저 생성 (Flyway V4 시드 데이터와 충돌 방지)
+        testUser = userRepository.findByEmail("test-investor@tokit.com")
+                .map(existingUser -> {
+                    existingUser.updateKycStatus(true);
+                    return userRepository.save(existingUser);
+                })
+                .orElseGet(() -> userRepository.save(User.builder()
+                        .name("김토킷")
+                        .email("test-investor@tokit.com")
+                        .walletAddress("0x70997970C51812dc3A010C7d01b50e0d17dc79C8")
+                        .kycStatus(true)
+                        .build()));
 
         // 2. 발행인 생성
         testIssuer = issuerRepository.save(Issuer.builder()

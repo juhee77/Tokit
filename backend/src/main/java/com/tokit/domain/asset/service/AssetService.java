@@ -73,6 +73,11 @@ public class AssetService {
                 .orElseThrow(() -> new BusinessException(ErrorCode.ASSET_NOT_FOUND));
     }
 
+    public Asset getAssetById(Long id) {
+        return assetRepository.findById(id)
+                .orElseThrow(() -> new BusinessException(ErrorCode.ASSET_NOT_FOUND));
+    }
+
     @Transactional
     public void subscribeAsset(String symbol, Long userId, BigDecimal amount) {
         User user = userRepository.findById(userId)
