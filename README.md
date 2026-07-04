@@ -11,6 +11,7 @@
 - **초고속 매칭 처리**: 인메모리(Redis)를 응용한 대규모 거래 매칭 알고리즘 구현.
 - **실시간 비차단 데이터 스트리밍**: 클라이언트(Next.js) 렌더링 오버헤드를 제어하는 최적화된 SSE/WebSocket 스트림 채널 구축.
 - **온-오프체인 정합성 보장**: PostgreSQL 오프체인 잔고 데이터와 블록체인(Hardhat Solidity) 온체인 스마트 컨트랙트 간의 일일 상시 대사(Reconciliation) 파이프라인 수립.
+- **대용량 배당 분배 엔진**: Spring Batch 5 및 비관적 락(Pessimistic Lock) 기반으로 수만 명의 STO 주주에게 지분 비율대로 KRW 예치금을 오차(소수점 첫째 자리 절사) 없이 배분하는 대량 결산 배치 아키텍처 수립.
 
 ### 💼 비즈니스 아키텍처 (Business Value)
 고가의 실물 자산(예: 상업용 부동산, 미술품 등)을 신탁하여 수익증권을 발행하고, 이를 블록체인 기반의 토큰으로 분할 발행(STO)하여 다수의 투자자가 안전하게 공모 청약 및 2차 거래(호가 매칭)를 할 수 있도록 지원하는 초고속 결제 및 매칭 인프라입니다.
@@ -148,7 +149,59 @@ sequenceDiagram
     Note over MQ: 매칭 완료 시 Trade_Success 이벤트 발행
     MQ->>BE: 체결 정보 전송 및 DB 반영
     BE->>FE: WebSocket/SSE 브로드캐스팅 (호가창 및 체결 갱신)
+
+### 4) 배당금 자동 계산 및 원화 분배 배치 흐름 (Spring Batch 5)
+```mermaid
+sequenceDiagram
+    autonumber
+    actor Admin as 관리자
+    participant FE as 프론트엔드 (Next.js)
+    participant BE as 백엔드 (Spring Boot)
+    participant Batch as Spring Batch 5
+    participant DB as 데이터베이스 (PostgreSQL)
+
+    Admin->>FE: 특정 STO 배당 재원 입력 및 분배 실행
+    FE->>BE: POST /api/admin/dividends (X-Idempotency-Key 헤더)
+    Note over BE: DividendPayout 마스터 로그 생성 (status: RUNNING)
+    BE-->>FE: 비동기 처리 응답 반환 (200 OK)
+    BE->>Batch: dividendPayoutJob 비동기 실행 (CompletableFuture)
+    loop Paging Reader (Chunk Size: 10)
+        Batch->>DB: 해당 STO 보유한 주주 지갑 페이징 조회
+        Batch->>Batch: 지분율(보유량 / 총발행량) 계산 및 배당금 산출 (원화 첫째자리 절사)
+        Batch->>DB: 주주 KRW 지갑 비관적 배타 락 (FOR UPDATE) 획득 및 배당금 증액
+        Batch->>DB: DividendPayoutDetail 상세 로그 영속화 (status: SUCCESS)
+    end
+    Batch->>DB: DividendPayout 마스터 상태 COMPLETED 변경
+    FE->>BE: GET /api/admin/dividends/{payoutId}/details (배치 결과 실시간 조회)
+    BE-->>FE: 상세 분배 현황 반환 (지분율, 지급 금액 등)
 ```
+- **데이터 정합성 및 동시성 방어**: 다수의 주주 지갑에 예치금을 일괄 입금하는 동안 발생할 수 있는 동시 충전/출금 이슈를 예방하기 위해, 각 주주의 KRW 지갑을 비관적 배타 락(`PESSIMISTIC_WRITE`)으로 잠금 처리한 후 입금 트랜잭션을 실행합니다.
+
+### 5) 온-오프체인 데이터 대사 배치 흐름 (Reconciliation Batch)
+```mermaid
+sequenceDiagram
+    autonumber
+    participant Scheduler as Quartz / Scheduler
+    participant Batch as Spring Batch 5
+    participant DB as 데이터베이스 (PostgreSQL)
+    participant BC as 블록체인 (Hardhat Node)
+    participant Slack as 관리자 (Slack Alert)
+
+    Scheduler->>Batch: 일일 정합성 대사 잡 실행 (reconciliationJob)
+    loop Paging Reader
+        Batch->>DB: 유효 주주 지갑 및 오프체인 토큰 잔고 조회
+    end
+    loop Processor / Validator
+        Batch->>BC: ERC-1400.balanceOfByPartition(walletAddress) 호출 (온체인 잔고 조회)
+        Batch->>Batch: 오프체인 잔고 vs 온체인 잔고 1:1 대조 검증
+    end
+    alt 잔고 불일치 발생
+        Batch->>DB: reconciliation_logs에 불일치 원장 기록 저장
+        Batch->>Slack: 관리자 채널로 크리티컬 경고 메세지 발송
+    end
+```
+- **0.1원의 오차 없는 신뢰 보장**: 매 영업일 정해진 스케줄러에 따라 오프체인 RDBMS 잔액과 블록체인 온체인 컨트랙트 원장을 상호 대조하며, 불일치가 발견되면 즉시 관리자 채널에 긴급 알림을 전송하여 온-오프체인 데이터 싱크 무결성을 유지합니다.
+
 - **실시간 비차단 결합**: 거래소 화면 진입 시 STOMP WebSocket (`ws-tokit`) 채널과 SSE (`/api/trades/subscribe/{symbol}`)를 동시 구독하여, 초고속 오프체인 매칭 엔진에서 연산된 체결 및 호가 정보를 화면에 실시간으로 반영합니다.
 
 ---
@@ -165,6 +218,7 @@ sequenceDiagram
 - **공모 청약 모듈 (100%)**: 자산 모집 실시간 달성률 표시, 최소 청약 금액 유효성 필터링 및 청약 완료 후 즉시 온체인 자산 배정.
 - **실시간 호가 및 체결 거래소 (90%)**: STOMP WebSocket 호가판 및 SSE 체결 내역 결합 완료.
 - **매칭 엔진 동시성 고하중 검증 (100%)**: 다중 스레드 하의 비동기 RabbitMQ 매칭 시 proxy 지연로딩 예외 극복 및 정합성 테스트 성공.
+- **배당금 자동 계산 및 지급 배치 엔진 (100%)**: Spring Batch 5 Chunk 지향 처리를 통한 대용량 주주 지분 배당 분배, 비관적 락을 통한 예치금 증액 정합성 확보 및 어드민 대시보드 UI 연동 완료.
 
 ---
 
