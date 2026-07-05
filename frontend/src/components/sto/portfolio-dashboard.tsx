@@ -2,9 +2,10 @@
 
 import { useState, useEffect, useMemo } from 'react'
 import Link from 'next/link'
-import { TrendingUp, ArrowRight, Building2, Factory, Leaf, Briefcase, RefreshCw, Loader2 } from 'lucide-react'
+import { TrendingUp, ArrowRight, Building2, Factory, Leaf, Briefcase, RefreshCw, Loader2, Send, ShieldCheck } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { fetchApi } from '@/lib/api'
+import { toast } from 'sonner'
 
 interface RangeConfig {
   mockValue: number
@@ -84,6 +85,12 @@ export function PortfolioDashboard() {
   const [realUser, setRealUser] = useState<any>(null)
   const [loading, setLoading] = useState(true)
 
+  // Gasless transfer form states
+  const [transferAsset, setTransferAsset] = useState('')
+  const [transferTo, setTransferTo] = useState('')
+  const [transferAmount, setTransferAmount] = useState('')
+  const [transferLoading, setTransferLoading] = useState(false)
+
   const loadRealData = async () => {
     setLoading(true)
     let savedId = 1
@@ -99,6 +106,66 @@ export function PortfolioDashboard() {
       console.error("Failed to load real portfolio data:", e)
     } finally {
       setLoading(false)
+    }
+  }
+
+  const handleGaslessTransfer = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!transferAsset || !transferTo || !transferAmount) {
+      toast.error("모든 이체 정보를 채워주세요.")
+      return
+    }
+
+    if (typeof window === "undefined" || !(window as any).ethereum) {
+      toast.error("MetaMask 지갑이 감지되지 않았습니다. 브라우저 확장을 설치해 주세요.")
+      return
+    }
+
+    setTransferLoading(true)
+    try {
+      const accounts = await (window as any).ethereum.request({ method: 'eth_requestAccounts' })
+      const fromAddress = accounts[0]
+
+      const nonceRes = await fetchApi<any>(`/api/relayer/nonce/${fromAddress}`)
+      const nonce = nonceRes.nonce
+
+      const amountStr = parseFloat(transferAmount).toString()
+      const plainMessage = `${fromAddress.toLowerCase()}:${transferTo.toLowerCase()}:${transferAsset}:${amountStr}:${nonce}`
+
+      const signature = await (window as any).ethereum.request({
+        method: 'personal_sign',
+        params: [plainMessage, fromAddress]
+      })
+
+      const response = await fetch(`http://localhost:8080/api/relayer/transfer`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          fromAddress,
+          toAddress: transferTo,
+          assetSymbol: transferAsset,
+          amount: parseFloat(transferAmount),
+          nonce,
+          signature
+        })
+      })
+
+      const json = await response.json()
+      if (!response.ok) {
+        throw new Error(json.message || "Relayer transfer failed")
+      }
+
+      toast.success("가스비 대납 이체가 완료되었습니다! (Gas paid by Relayer)")
+      setTransferTo('')
+      setTransferAmount('')
+      loadRealData()
+    } catch (err: any) {
+      console.error("Gasless transfer failed:", err)
+      toast.error("이체 실패: " + err.message)
+    } finally {
+      setTransferLoading(false)
     }
   }
 
@@ -447,6 +514,76 @@ export function PortfolioDashboard() {
             </tbody>
           </table>
         </div>
+      </div>
+
+      {/* Gasless Transfer Card */}
+      <div className="bg-card border border-outline-variant rounded p-6 shadow-sm flex flex-col mt-6 gap-6">
+        <div>
+          <div className="flex items-center gap-2 mb-1">
+            <ShieldCheck className="w-5 h-5 text-secondary" />
+            <h2 className="text-headline-md font-bold text-foreground">가스비 대납 토큰증권 이체 (Gasless Relayed Transfer)</h2>
+          </div>
+          <p className="text-xs text-muted-foreground">
+            블록체인 가스비(수수료)를 지불할 ETH 코인이 없어도 비밀키 서명만으로 토큰증권을 안전하게 무상 양도할 수 있습니다. 수수료는 TOKIT Relayer가 대납합니다.
+          </p>
+        </div>
+
+        <form onSubmit={handleGaslessTransfer} className="grid grid-cols-1 md:grid-cols-4 gap-4 items-end">
+          <div className="flex flex-col gap-2">
+            <label className="text-xs font-semibold text-muted-foreground">전송할 자산 선택</label>
+            <select
+              value={transferAsset}
+              onChange={(e) => setTransferAsset(e.target.value)}
+              className="bg-surface border border-outline-variant rounded p-3 text-sm text-foreground outline-none focus:border-secondary transition-colors"
+            >
+              <option value="">-- 자산 선택 --</option>
+              {realWallets.filter(w => w.assetSymbol && w.assetSymbol !== "KRW" && w.balance > 0).map((wallet) => (
+                <option key={wallet.id} value={wallet.assetSymbol}>
+                  {wallet.assetSymbol} (잔고: {wallet.balance})
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div className="flex flex-col gap-2 md:col-span-2">
+            <label className="text-xs font-semibold text-muted-foreground">수신자 지갑 주소 (0x...)</label>
+            <input
+              type="text"
+              placeholder="0x70997970C51812dc3A010C7d01b50e0d17dc79C8"
+              value={transferTo}
+              onChange={(e) => setTransferTo(e.target.value)}
+              className="bg-surface border border-outline-variant rounded p-3 text-sm text-foreground outline-none focus:border-secondary transition-colors placeholder-muted-foreground"
+            />
+          </div>
+
+          <div className="flex flex-col gap-2">
+            <label className="text-xs font-semibold text-muted-foreground">전송 수량</label>
+            <div className="flex gap-2">
+              <input
+                type="number"
+                step="any"
+                placeholder="0.0"
+                value={transferAmount}
+                onChange={(e) => setTransferAmount(e.target.value)}
+                className="flex-1 bg-surface border border-outline-variant rounded p-3 text-sm text-foreground outline-none focus:border-secondary transition-colors placeholder-muted-foreground"
+              />
+              <button
+                type="submit"
+                disabled={transferLoading}
+                className="bg-secondary text-primary font-bold px-5 py-3 rounded hover:bg-secondary/90 transition-colors flex items-center justify-center gap-1.5 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {transferLoading ? (
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                ) : (
+                  <>
+                    <Send className="w-4 h-4" />
+                    이체
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
+        </form>
       </div>
     </div>
   )

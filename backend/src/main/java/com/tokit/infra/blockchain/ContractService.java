@@ -194,8 +194,12 @@ public class ContractService {
      * 여기서는 Admin(Owner) 권한으로 forceTransferByPartition을 직접 날려서 온체인 잔고 동기화를 수행
      */
     public void handleTransferByPartition(String symbol, String partition, String from, String to, BigDecimal amount) {
-        log.info("Executing Admin Force Partition Transfer. Symbol: {}, Partition: {}, From: {}, To: {}, Amount: {}",
-                symbol, partition, from, to, amount);
+        handleTransferByPartition(this.contractAddress, symbol, partition, from, to, amount);
+    }
+
+    public void handleTransferByPartition(String targetContractAddress, String symbol, String partition, String from, String to, BigDecimal amount) {
+        log.info("Executing Admin Force Partition Transfer. TargetContract: {}, Symbol: {}, Partition: {}, From: {}, To: {}, Amount: {}",
+                targetContractAddress, symbol, partition, from, to, amount);
         
         try {
             // partition string -> bytes32
@@ -229,7 +233,7 @@ public class ContractService {
             EthSendTransaction response = txManager.sendTransaction(
                     gasPrice,
                     gasLimit,
-                    contractAddress,
+                    targetContractAddress,
                     encodedFunction,
                     BigInteger.ZERO
             );
