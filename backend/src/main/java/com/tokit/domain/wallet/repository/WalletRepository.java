@@ -44,4 +44,6 @@ public interface WalletRepository extends JpaRepository<Wallet, Long> {
 
     @Query("SELECT COUNT(DISTINCT w.user.id) FROM Wallet w WHERE w.asset.id = :assetId")
     long countInvestorsByAssetId(@Param("assetId") Long assetId);
+
+    List<Wallet> findByAsset_IdAndBalanceGreaterThanOrderByBalanceDesc(Long assetId, BigDecimal balance);
 }

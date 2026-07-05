@@ -46,3 +46,4 @@ blockchain/.env
 docker/db_data/
 docker/redis_data/
 docker/rabbitmq_data/
+backend/uploads/
