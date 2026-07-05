@@ -7,6 +7,8 @@ import com.tokit.domain.user.entity.User;
 import com.tokit.domain.wallet.entity.Wallet;
 import com.tokit.domain.wallet.repository.WalletRepository;
 import com.tokit.infra.blockchain.ContractService;
+import com.tokit.infra.alert.SlackAlertService;
+import com.tokit.domain.alert.controller.AdminAlertController;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -36,12 +38,20 @@ class ReconciliationBatchTest {
     @Mock
     private ContractService contractService;
 
+    @Mock
+    private SlackAlertService slackAlertService;
+
+    @Mock
+    private AdminAlertController adminAlertController;
+
     @BeforeEach
     void setUp() {
         reconciliationBatchConfig = new ReconciliationBatchConfig(
                 walletRepository,
                 reconciliationLogRepository,
-                contractService
+                contractService,
+                slackAlertService,
+                adminAlertController
         );
     }
 

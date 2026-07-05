@@ -199,7 +199,38 @@ export default function AdminPage() {
 
   useEffect(() => {
     loadAllData()
-  }, [loadAllData])
+
+    const apiBaseUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080'
+    const eventSource = new EventSource(`${apiBaseUrl}/api/admin/alerts/subscribe`)
+
+    eventSource.addEventListener("ALERT", (event) => {
+      try {
+        const data = JSON.parse(event.data)
+        toast.error(
+          React.createElement("div", { className: "flex flex-col gap-1 text-left" },
+            React.createElement("span", { className: "font-bold text-red-600" }, data.title),
+            React.createElement("span", { className: "text-xs text-slate-600 whitespace-pre-wrap" }, data.message)
+          ),
+          {
+            duration: 10000,
+          }
+        )
+        loadLogs()
+        loadUsers()
+      } catch (e) {
+        console.error("Failed to parse SSE alert data:", e)
+      }
+    })
+
+    eventSource.onerror = (err) => {
+      console.error("SSE connection error:", err)
+      eventSource.close()
+    }
+
+    return () => {
+      eventSource.close()
+    }
+  }, [loadAllData, loadLogs, loadUsers])
 
   // 4. KYC Status Toggle Handler
   const handleKycToggle = async (userId: number, currentKyc: boolean) => {

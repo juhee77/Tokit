@@ -22,6 +22,8 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.context.annotation.Lazy;
 import org.springframework.data.domain.Sort;
+import com.tokit.infra.alert.SlackAlertService;
+import com.tokit.domain.alert.controller.AdminAlertController;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
@@ -34,13 +36,19 @@ public class ReconciliationBatchConfig extends DefaultBatchConfiguration {
     private final WalletRepository walletRepository;
     private final ReconciliationLogRepository reconciliationLogRepository;
     private final ContractService contractService;
+    private final SlackAlertService slackAlertService;
+    private final AdminAlertController adminAlertController;
 
     public ReconciliationBatchConfig(@Lazy WalletRepository walletRepository,
                                     @Lazy ReconciliationLogRepository reconciliationLogRepository,
-                                    ContractService contractService) {
+                                    ContractService contractService,
+                                    @Lazy SlackAlertService slackAlertService,
+                                    @Lazy AdminAlertController adminAlertController) {
         this.walletRepository = walletRepository;
         this.reconciliationLogRepository = reconciliationLogRepository;
         this.contractService = contractService;
+        this.slackAlertService = slackAlertService;
+        this.adminAlertController = adminAlertController;
     }
 
     @Bean
@@ -118,6 +126,23 @@ public class ReconciliationBatchConfig extends DefaultBatchConfiguration {
     }
 
     private void sendAlertNotification(ReconciliationLog logEntry) {
+        String title = "CRITICAL: 온-오프체인 데이터 불일치 감지";
+        String message = String.format(
+                "사용자: %s (%s)\n" +
+                "자산: %s\n" +
+                "오차 수량: %s\n" +
+                "오프체인 잔액: %s\n" +
+                "온체인 잔고: %s\n" +
+                "발생 일시: %s",
+                logEntry.getUser().getName(),
+                logEntry.getWalletAddress(),
+                logEntry.getAsset().getSymbol(),
+                logEntry.getDifference(),
+                logEntry.getOffchainBalance(),
+                logEntry.getOnchainBalance(),
+                logEntry.getCheckedAt()
+        );
+
         log.error("[CRITICAL ALERT] [Reconciliation Auditing Discrepancy] " +
                 "Balance discrepancy of {} units of {} found for User: {} (Wallet: {}). " +
                 "Offchain = {}, Onchain = {}. Alert logged at {}",
@@ -128,5 +153,11 @@ public class ReconciliationBatchConfig extends DefaultBatchConfiguration {
                 logEntry.getOffchainBalance(),
                 logEntry.getOnchainBalance(),
                 logEntry.getCheckedAt());
+
+        // 1. 슬랙 알림 발송
+        slackAlertService.sendAlert(title, message);
+
+        // 2. 어드민 대시보드 실시간 SSE 푸시 발송
+        adminAlertController.broadcastAlert(title, message);
     }
 }
