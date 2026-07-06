@@ -85,6 +85,7 @@ public class RelayerService {
             throw new IllegalArgumentException("이더리움 서명 검증에 실패했습니다.");
         }
 
+        relayerNonce.checkAndIncrementLimit();
         relayerNonce.incrementNonce();
         relayerNonceRepository.save(relayerNonce);
 

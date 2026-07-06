@@ -91,6 +91,30 @@ export function PortfolioDashboard() {
   const [transferAmount, setTransferAmount] = useState('')
   const [transferLoading, setTransferLoading] = useState(false)
 
+  // Dividend simulator state
+  const [simulatedTotalBudget, setSimulatedTotalBudget] = useState('')
+
+  const dividendSimulations = useMemo(() => {
+    const budget = parseFloat(simulatedTotalBudget) || 0
+    if (budget <= 0) return []
+
+    return realWallets
+      .filter(w => w.assetSymbol && w.assetSymbol !== "KRW" && w.balance > 0)
+      .map(wallet => {
+        // total supply mapping from asset or default fallback
+        const supply = wallet.assetTotalSupply || 100000 
+        const ratio = (wallet.balance / supply) * 100
+        const expectedPayout = budget * (wallet.balance / supply)
+        return {
+          symbol: wallet.assetSymbol,
+          name: wallet.assetName || wallet.assetSymbol,
+          balance: wallet.balance,
+          ratio: ratio.toFixed(4),
+          payout: expectedPayout
+        }
+      })
+  }, [simulatedTotalBudget, realWallets])
+
   const loadRealData = async () => {
     setLoading(true)
     let savedId = 1
@@ -513,6 +537,59 @@ export function PortfolioDashboard() {
               })}
             </tbody>
           </table>
+        </div>
+      </div>
+
+      {/* Dividend Simulator Card */}
+      <div className="bg-card border border-outline-variant rounded p-6 shadow-sm flex flex-col mt-6 gap-6">
+        <div>
+          <div className="flex items-center gap-2 mb-1">
+            <TrendingUp className="w-5 h-5 text-secondary" />
+            <h2 className="text-headline-md font-bold text-foreground">실시간 예상 배당금 시뮬레이터 (Dividend Payout Simulator)</h2>
+          </div>
+          <p className="text-xs text-muted-foreground">
+            가상의 총 배당 재원(KRW)을 입력하면, 현재 보유 중인 STO 지분율에 비례하여 개별 수령할 예상 배당금을 실시간으로 모의 연산합니다.
+          </p>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-6 items-start">
+          {/* Input Panel */}
+          <div className="flex flex-col gap-2">
+            <label className="text-xs font-semibold text-muted-foreground font-medium">총 배당 재원 입력 (KRW)</label>
+            <input
+              type="number"
+              placeholder="예: 10,000,000"
+              value={simulatedTotalBudget}
+              onChange={(e) => setSimulatedTotalBudget(e.target.value)}
+              className="w-full bg-surface border border-outline-variant rounded p-3 text-sm text-foreground outline-none focus:border-secondary transition-colors placeholder-muted-foreground font-mono"
+            />
+          </div>
+
+          {/* Results Panel */}
+          <div className="md:col-span-3 flex flex-col gap-3">
+            <h3 className="text-xs font-bold text-slate-400 uppercase tracking-wider">예상 배당 수령액 상세</h3>
+            {dividendSimulations.length === 0 ? (
+              <p className="text-xs text-slate-500 italic py-2">총 배당 재원을 입력하고 보유 STO를 기반으로 계산해 보세요.</p>
+            ) : (
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                {dividendSimulations.map((sim, idx) => (
+                  <div key={idx} className="p-4 bg-surface-container-low border border-outline-variant rounded-xl flex flex-col gap-1">
+                    <div className="flex justify-between items-center">
+                      <span className="text-xs font-bold text-secondary">{sim.symbol}</span>
+                      <span className="text-[10px] text-muted-foreground font-mono">{sim.ratio}% 지분</span>
+                    </div>
+                    <p className="text-sm font-semibold text-foreground truncate mt-1">{sim.name}</p>
+                    <div className="flex justify-between items-baseline border-t border-outline-variant/30 pt-2 mt-1">
+                      <span className="text-[10px] text-slate-500">예상 수령액</span>
+                      <span className="text-sm font-bold text-foreground font-mono">
+                        {new Intl.NumberFormat('ko-KR', { style: 'currency', currency: 'KRW' }).format(sim.payout)}
+                      </span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
         </div>
       </div>
 

@@ -173,4 +173,58 @@ class RelayerControllerTest {
                 amount
         );
     }
+
+    @Test
+    @DisplayName("일일 릴레이 한도(5회)를 이미 소진한 지갑의 요청은 에러를 던져야 한다.")
+    void verifySignatureAndTransfer_RateLimitExceeded() throws Exception {
+        // Given
+        Long nonce = 0L;
+        BigDecimal amount = BigDecimal.valueOf(100);
+
+        String plainMessage = sender.getWalletAddress().toLowerCase() + ":" +
+                receiver.getWalletAddress().toLowerCase() + ":" +
+                testAsset.getSymbol() + ":" +
+                amount.stripTrailingZeros().toPlainString() + ":" +
+                nonce;
+
+        byte[] msgBytes = plainMessage.getBytes(StandardCharsets.UTF_8);
+        String prefix = "\u0019Ethereum Signed Message:\n" + msgBytes.length;
+        byte[] prefixBytes = prefix.getBytes(StandardCharsets.UTF_8);
+        byte[] totalMsg = new byte[prefixBytes.length + msgBytes.length];
+        System.arraycopy(prefixBytes, 0, totalMsg, 0, prefixBytes.length);
+        System.arraycopy(msgBytes, 0, totalMsg, prefixBytes.length, msgBytes.length);
+        byte[] messageHash = Hash.sha3(totalMsg);
+
+        Sign.SignatureData signatureData = Sign.signMessage(messageHash, senderKeyPair, false);
+        byte[] retval = new byte[65];
+        System.arraycopy(signatureData.getR(), 0, retval, 0, 32);
+        System.arraycopy(signatureData.getS(), 0, retval, 32, 32);
+        retval[64] = signatureData.getV()[0];
+        String hexSignature = Numeric.toHexString(retval);
+
+        RelayerNonce relayerNonce = RelayerNonce.builder()
+                .walletAddress(sender.getWalletAddress())
+                .nextNonce(0L)
+                .lastTxDate(java.time.LocalDate.now())
+                .dailyTxCount(5)
+                .build();
+
+        Wallet senderWallet = Wallet.builder().user(sender).asset(testAsset).balance(BigDecimal.valueOf(500)).lockedBalance(BigDecimal.ZERO).build();
+
+        when(relayerNonceRepository.findById(sender.getWalletAddress().toLowerCase())).thenReturn(Optional.of(relayerNonce));
+
+        // When & Then
+        IllegalArgumentException exception = assertThrows(IllegalArgumentException.class, () -> {
+            relayerService.verifySignatureAndTransfer(
+                    sender.getWalletAddress(),
+                    receiver.getWalletAddress(),
+                    testAsset.getSymbol(),
+                    amount,
+                    nonce,
+                    hexSignature
+            );
+        });
+
+        assertEquals("일일 대납 이체 한도(5회)를 초과했습니다.", exception.getMessage());
+    }
 }
