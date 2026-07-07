@@ -101,21 +101,32 @@ public class AssetService {
             throw new BusinessException("예치금 잔액이 부족합니다.", ErrorCode.INVALID_INPUT_VALUE);
         }
 
-        krwWallet.updateBalance(krwWallet.getBalance().subtract(amount), krwWallet.getLockedBalance());
-
-        // 2. 토큰 수량 계산 (투자금액 / 초기공모가)
-        BigDecimal tokenQuantity = amount.divide(asset.getIssuePrice(), 4, RoundingMode.HALF_UP);
-
-        // 3. 토큰 자산 지갑 잠금 및 잔고 추가
+        // 2. 토큰 자산 지갑 잠금 및 잔고 추가
         Wallet assetWallet = walletRepository.findAssetWalletByUserIdAndAssetIdWithPessimisticLock(userId, asset.getId())
-                .orElseGet(() -> walletRepository.save(Wallet.builder()
+                .orElseGet(() -> Wallet.builder()
                         .user(user)
                         .asset(asset)
                         .balance(BigDecimal.ZERO)
                         .lockedBalance(BigDecimal.ZERO)
-                        .build()));
+                        .build());
 
+        // 투자자 등급 한도 검증
+        BigDecimal currentInvestedAmount = assetWallet.getBalance().multiply(asset.getIssuePrice());
+        BigDecimal totalProjectedInvestment = currentInvestedAmount.add(amount);
+        BigDecimal limit = user.getInvestorType().getLimitAmount();
+        if (limit != null && totalProjectedInvestment.compareTo(limit) > 0) {
+            throw new BusinessException("투자 한도를 초과하여 청약할 수 없습니다. (투자 한도: " + limit + " KRW)", ErrorCode.INVALID_INPUT_VALUE);
+        }
+
+        // 3. 잔액 차감 및 영속화
+        krwWallet.updateBalance(krwWallet.getBalance().subtract(amount), krwWallet.getLockedBalance());
+        
+        BigDecimal tokenQuantity = amount.divide(asset.getIssuePrice(), 4, RoundingMode.HALF_UP);
         assetWallet.updateBalance(assetWallet.getBalance().add(tokenQuantity), assetWallet.getLockedBalance());
+        
+        if (assetWallet.getId() == null) {
+            walletRepository.save(assetWallet);
+        }
 
         // 4. 온체인 토큰 강제 전송 실행 (Admin/Deployer -> User)
         String deployerAddress = "0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266";

@@ -28,15 +28,24 @@ public class User {
     @Column(name = "wallet_address", nullable = false)
     private String walletAddress; // 블록체인 지갑 주소
 
+    @Enumerated(EnumType.STRING)
+    @Column(name = "investor_type", nullable = false)
+    private InvestorType investorType;
+
     @Builder
-    public User(String name, boolean kycStatus, String email, String walletAddress) {
+    public User(String name, boolean kycStatus, String email, String walletAddress, InvestorType investorType) {
         this.name = name;
         this.kycStatus = kycStatus;
         this.email = email;
         this.walletAddress = walletAddress;
+        this.investorType = investorType != null ? investorType : InvestorType.GENERAL;
     }
 
     public void updateKycStatus(boolean kycStatus) {
         this.kycStatus = kycStatus;
+    }
+
+    public void updateInvestorType(InvestorType investorType) {
+        this.investorType = investorType != null ? investorType : InvestorType.GENERAL;
     }
 }

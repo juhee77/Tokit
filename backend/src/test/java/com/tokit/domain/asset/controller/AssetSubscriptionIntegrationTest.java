@@ -165,4 +165,22 @@ class AssetSubscriptionIntegrationTest {
                         .content(requestBody))
                 .andExpect(status().isBadRequest());
     }
+
+    @Test
+    @DisplayName("토큰증권 청약 신청 실패 - 일반투자자 투자 한도(10,000,000원) 초과")
+    void subscribeAsset_Fail_LimitExceeded() throws Exception {
+        // given
+        Wallet krwWallet = walletRepository.findKrwWalletByUserId(testUser.getId()).orElseThrow();
+        krwWallet.updateBalance(BigDecimal.valueOf(15000000), BigDecimal.ZERO);
+        walletRepository.save(krwWallet);
+
+        String requestBody = "{\"userId\":" + testUser.getId() + ",\"amount\":10000100}"; 
+
+        // when & then
+        mockMvc.perform(post("/api/assets/TEST-GNPM/subscribe")
+                        .header("X-Idempotency-Key", "idempotency-key-uuid-1237")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(requestBody))
+                .andExpect(status().isBadRequest());
+    }
 }
