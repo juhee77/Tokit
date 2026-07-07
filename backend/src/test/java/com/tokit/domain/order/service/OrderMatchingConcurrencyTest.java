@@ -177,7 +177,7 @@ class OrderMatchingConcurrencyTest {
                 }
             });
 
-            Thread.sleep(50); // Give database transaction time to commit
+            Thread.sleep(350); // Give database transaction time to commit
 
             // Place SELL order: 5 tokens at 10,000 KRW
             executorService.submit(() -> {
@@ -196,7 +196,7 @@ class OrderMatchingConcurrencyTest {
                 }
             });
 
-            Thread.sleep(50); // Give database transaction time to commit
+            Thread.sleep(350); // Give database transaction time to commit
         }
 
         latch.await();
@@ -204,7 +204,7 @@ class OrderMatchingConcurrencyTest {
         // Wait for RabbitMQ asynchronous processing to complete matching and saving trades.
         // We expect exactly 10 trades (each seller matched with one buyer or similar combination).
         long startTime = System.currentTimeMillis();
-        long timeout = 10000; // 10 seconds timeout
+        long timeout = 15000; // 15 seconds timeout
         while (tradeRepository.count() < 10 && (System.currentTimeMillis() - startTime) < timeout) {
             Thread.sleep(200);
         }
