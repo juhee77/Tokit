@@ -1,0 +1,2 @@
+-- V11__add_test_users_and_assets.sql
+-- Description: Marker migration file. Actual bulk dataset (100 users / 100 assets / wallets) is programmatically generated in BlockchainInitializer at boot time.

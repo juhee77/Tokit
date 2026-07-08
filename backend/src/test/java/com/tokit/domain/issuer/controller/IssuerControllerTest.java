@@ -46,7 +46,7 @@ class IssuerControllerTest {
 
         testIssuer = issuerRepository.save(Issuer.builder()
                 .companyName("한강자산운용")
-                .bizRegNo("123-45-67890")
+                .bizRegNo("999-99-99999")
                 .build());
 
         testAsset = assetRepository.save(Asset.builder()
