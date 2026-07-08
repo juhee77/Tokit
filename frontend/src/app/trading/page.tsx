@@ -84,6 +84,8 @@ function TradingContent() {
   const [initializing, setInitializing] = useState(true)
   const [selectedPrice, setSelectedPrice] = useState<number | undefined>()
   const [showTokenSelector, setShowTokenSelector] = useState(false)
+  const [searchTerm, setSearchTerm] = useState("")
+  const [activeCategory, setActiveCategory] = useState<"ALL" | "REAL_ESTATE" | "INFRA" | "ART_OTHER">("ALL")
 
   const [wallets, setWallets] = useState<any[]>([])
   const [userId, setUserId] = useState<number>(1)
@@ -151,6 +153,29 @@ function TradingContent() {
   }, [selectedSymbol, setAssets, setRecentTrades, setSelectedSymbol]);
 
   const currentAsset = assets.find((a) => a.symbol === selectedSymbol);
+
+  const filteredAssets = assets.filter((asset) => {
+    const matchesSearch = asset.symbol.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                          asset.name.toLowerCase().includes(searchTerm.toLowerCase());
+    
+    if (!matchesSearch) return false;
+    if (activeCategory === "ALL") return true;
+
+    const name = asset.name.toLowerCase();
+    const isRealEstate = name.includes("빌딩") || name.includes("오피스") || name.includes("주택") ||
+                         name.includes("리조트") || name.includes("콘도") || name.includes("호텔") ||
+                         name.includes("스페이스") || name.includes("코워킹");
+    
+    const isInfra = name.includes("발전소") || name.includes("발전기") || name.includes("데이터센터") ||
+                    name.includes("물류") || name.includes("창고");
+
+    if (activeCategory === "REAL_ESTATE") return isRealEstate;
+    if (activeCategory === "INFRA") return isInfra;
+    if (activeCategory === "ART_OTHER") return !isRealEstate && !isInfra;
+
+    return true;
+  });
+
   const currentPrice = recentTrades.length > 0
     ? recentTrades[0].price
     : (currentAsset?.issuePrice || 12500)
@@ -204,28 +229,65 @@ function TradingContent() {
 
               {/* Dropdown */}
               {showTokenSelector && (
-                <div className="absolute top-full left-0 mt-2 w-72 bg-card border border-outline-variant rounded shadow-lg z-50">
-                  {assets.map((asset) => (
-                    <button
-                      key={asset.symbol}
-                      onClick={() => {
-                        setSelectedSymbol(asset.symbol)
-                        setShowTokenSelector(false)
-                      }}
-                      className={cn(
-                        "w-full flex items-center gap-3 px-4 py-3 hover:bg-surface-container-low transition-colors",
-                        asset.symbol === selectedSymbol && "bg-surface-container"
-                      )}
-                    >
-                      <div className="w-8 h-8 rounded bg-secondary/10 flex items-center justify-center">
-                        <span className="text-secondary font-bold text-sm">{asset.symbol.slice(0, 2)}</span>
-                      </div>
-                      <div className="flex-1 text-left">
-                        <p className="font-semibold text-foreground">{asset.symbol}</p>
-                        <p className="text-xs text-muted-foreground">{asset.name}</p>
-                      </div>
-                    </button>
-                  ))}
+                <div className="absolute top-full left-0 mt-2 w-80 bg-card border border-outline-variant rounded shadow-lg z-50 overflow-hidden">
+                  {/* Search and Category Header */}
+                  <div className="p-3 border-b border-outline-variant bg-card sticky top-0 z-10 space-y-2">
+                    <input 
+                      type="text"
+                      placeholder="자산명 또는 심볼 검색..."
+                      value={searchTerm}
+                      onChange={(e) => setSearchTerm(e.target.value)}
+                      className="w-full px-3 py-1.5 text-xs bg-surface-container border border-outline-variant rounded focus:outline-none focus:border-secondary text-foreground placeholder:text-muted-foreground"
+                    />
+                    <div className="flex gap-1 text-[10px] font-medium overflow-x-auto pb-1 scrollbar-none">
+                      <button 
+                        onClick={() => setActiveCategory("ALL")}
+                        className={cn("px-2 py-1 rounded-full whitespace-nowrap transition-colors", activeCategory === "ALL" ? "bg-secondary text-secondary-foreground" : "bg-surface-container-high text-muted-foreground hover:text-foreground")}
+                      >전체</button>
+                      <button 
+                        onClick={() => setActiveCategory("REAL_ESTATE")}
+                        className={cn("px-2 py-1 rounded-full whitespace-nowrap transition-colors", activeCategory === "REAL_ESTATE" ? "bg-secondary text-secondary-foreground" : "bg-surface-container-high text-muted-foreground hover:text-foreground")}
+                      >부동산</button>
+                      <button 
+                        onClick={() => setActiveCategory("INFRA")}
+                        className={cn("px-2 py-1 rounded-full whitespace-nowrap transition-colors", activeCategory === "INFRA" ? "bg-secondary text-secondary-foreground" : "bg-surface-container-high text-muted-foreground hover:text-foreground")}
+                      >에너지/인프라</button>
+                      <button 
+                        onClick={() => setActiveCategory("ART_OTHER")}
+                        className={cn("px-2 py-1 rounded-full whitespace-nowrap transition-colors", activeCategory === "ART_OTHER" ? "bg-secondary text-secondary-foreground" : "bg-surface-container-high text-muted-foreground hover:text-foreground")}
+                      >미술품/기타</button>
+                    </div>
+                  </div>
+
+                  {/* Scrollable List */}
+                  <div className="max-h-72 overflow-y-auto scrollbar-thin scrollbar-thumb-outline-variant">
+                    {filteredAssets.length === 0 ? (
+                      <div className="p-4 text-xs text-center text-muted-foreground">검색 결과가 없습니다.</div>
+                    ) : (
+                      filteredAssets.map((asset) => (
+                        <button
+                          key={asset.symbol}
+                          onClick={() => {
+                            setSelectedSymbol(asset.symbol)
+                            setShowTokenSelector(false)
+                            setSearchTerm("") // Reset search term
+                          }}
+                          className={cn(
+                            "w-full flex items-center gap-3 px-4 py-2.5 hover:bg-surface-container-low transition-colors",
+                            asset.symbol === selectedSymbol && "bg-surface-container"
+                          )}
+                        >
+                          <div className="w-8 h-8 rounded bg-secondary/10 flex items-center justify-center shrink-0">
+                            <span className="text-secondary font-bold text-xs">{asset.symbol.slice(0, 2)}</span>
+                          </div>
+                          <div className="flex-1 text-left min-w-0">
+                            <p className="font-semibold text-foreground text-xs truncate">{asset.symbol}</p>
+                            <p className="text-xs text-muted-foreground truncate">{asset.name}</p>
+                          </div>
+                        </button>
+                      ))
+                    )}
+                  </div>
                 </div>
               )}
             </div>
