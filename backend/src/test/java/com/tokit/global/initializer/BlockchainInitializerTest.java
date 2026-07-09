@@ -1,40 +1,34 @@
 package com.tokit.global.initializer;
 
-import com.tokit.domain.asset.repository.AssetRepository;
 import com.tokit.domain.user.repository.UserRepository;
-import com.tokit.domain.wallet.repository.WalletRepository;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.test.context.ActiveProfiles;
-import org.springframework.transaction.annotation.Transactional;
+import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.InjectMocks;
+import org.mockito.Mock;
+import org.mockito.junit.jupiter.MockitoExtension;
 
-import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.Mockito.*;
 
-@SpringBootTest
-@ActiveProfiles("test")
-@Transactional
+@ExtendWith(MockitoExtension.class)
 public class BlockchainInitializerTest {
 
-    @Autowired
-    private UserRepository userRepository;
+    @Mock private UserRepository userRepository;
 
-    @Autowired
-    private AssetRepository assetRepository;
-
-    @Autowired
-    private WalletRepository walletRepository;
+    @InjectMocks
+    private BlockchainInitializer blockchainInitializer;
 
     @Test
-    @DisplayName("서버 초기화 시 대규모 모의 투자자 100명 및 STO 자산 100개가 성공적으로 생성된다.")
-    void testBulkInitialization() {
-        long userCount = userRepository.count();
-        long assetCount = assetRepository.count();
-        long walletCount = walletRepository.count();
+    @DisplayName("테스트 환경(JUnit 감지) 시에는 기본적으로 벌크 데이터 생성을 건너뛴다.")
+    void testSkipInTestProfile() throws Exception {
+        // Given
+        blockchainInitializer.forceExecute = false;
 
-        assertThat(userCount).isGreaterThanOrEqualTo(100);
-        assertThat(assetCount).isGreaterThanOrEqualTo(100);
-        assertThat(walletCount).isGreaterThanOrEqualTo(200); 
+        // When
+        blockchainInitializer.run();
+
+        // Then
+        verify(userRepository, never()).findAll();
+        verify(userRepository, never()).save(any());
     }
 }

@@ -53,13 +53,13 @@ class IdempotencyIntegrationTest {
     void setUp() {
         mockMvc = MockMvcBuilders.webAppContextSetup(webApplicationContext).build();
         walletRepository.deleteAll();
-        userRepository.deleteAll();
         redisTemplate.getConnectionFactory().getConnection().serverCommands().flushAll();
 
+        String uniqueId = java.util.UUID.randomUUID().toString();
         testUser = userRepository.save(User.builder()
                 .name("Idempotent User")
-                .email("idempotent@tokit.com")
-                .walletAddress("0xIDEMPOTENT")
+                .email("idempotent-" + uniqueId + "@tokit.com")
+                .walletAddress("0xIDEMPOTENT-" + uniqueId.substring(0, 10))
                 .kycStatus(true)
                 .build());
 
@@ -74,7 +74,6 @@ class IdempotencyIntegrationTest {
     @AfterEach
     void tearDown() {
         walletRepository.deleteAll();
-        userRepository.deleteAll();
         redisTemplate.getConnectionFactory().getConnection().serverCommands().flushAll();
     }
 

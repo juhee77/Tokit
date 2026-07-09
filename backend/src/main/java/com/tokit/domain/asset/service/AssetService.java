@@ -156,4 +156,24 @@ public class AssetService {
         }
         return (int) count;
     }
+
+    @org.springframework.transaction.annotation.Transactional(readOnly = true)
+    public java.util.Map<Long, BigDecimal> getAssetCurrentAmountsMap() {
+        List<Object[]> rows = walletRepository.sumBalancesGroupByAssetId();
+        return rows.stream().collect(java.util.stream.Collectors.toMap(
+                row -> (Long) row[0],
+                row -> (BigDecimal) row[1],
+                (v1, v2) -> v1
+        ));
+    }
+
+    @org.springframework.transaction.annotation.Transactional(readOnly = true)
+    public java.util.Map<Long, Long> getAssetTotalInvestorsMap() {
+        List<Object[]> rows = walletRepository.countInvestorsGroupByAssetId();
+        return rows.stream().collect(java.util.stream.Collectors.toMap(
+                row -> (Long) row[0],
+                row -> (Long) row[1],
+                (v1, v2) -> v1
+        ));
+    }
 }

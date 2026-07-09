@@ -46,4 +46,10 @@ public interface WalletRepository extends JpaRepository<Wallet, Long> {
     long countInvestorsByAssetId(@Param("assetId") Long assetId);
 
     List<Wallet> findByAsset_IdAndBalanceGreaterThanOrderByBalanceDesc(Long assetId, BigDecimal balance);
+
+    @Query("SELECT w.asset.id, COALESCE(SUM(w.balance), 0) FROM Wallet w WHERE w.asset IS NOT NULL GROUP BY w.asset.id")
+    List<Object[]> sumBalancesGroupByAssetId();
+
+    @Query("SELECT w.asset.id, COUNT(DISTINCT w.user.id) FROM Wallet w WHERE w.asset IS NOT NULL GROUP BY w.asset.id")
+    List<Object[]> countInvestorsGroupByAssetId();
 }

@@ -62,15 +62,15 @@ class AssetSubscriptionIntegrationTest {
     void setUp() {
         mockMvc = MockMvcBuilders.webAppContextSetup(webApplicationContext).build();
 
-        // 1. 테스트 유저 생성 (Flyway V4 시드 데이터와 충돌 방지)
-        testUser = userRepository.findByEmail("test-investor@tokit.com")
+        // 1. 테스트 유저 생성 (완벽한 테스트 격리를 위해 고유 이메일 사용)
+        testUser = userRepository.findByEmail("test-investor-sub-unique@tokit.com")
                 .map(existingUser -> {
                     existingUser.updateKycStatus(true);
                     return userRepository.save(existingUser);
                 })
                 .orElseGet(() -> userRepository.save(User.builder()
                         .name("김토킷")
-                        .email("test-investor@tokit.com")
+                        .email("test-investor-sub-unique@tokit.com")
                         .walletAddress("0x70997970C51812dc3A010C7d01b50e0d17dc79C8")
                         .kycStatus(true)
                         .build()));
@@ -92,13 +92,25 @@ class AssetSubscriptionIntegrationTest {
                 .status("청약중")
                 .build());
 
-        // 4. 원화 지갑 생성 (잔액: 1,000,000원)
-        walletRepository.save(Wallet.builder()
-                .user(testUser)
-                .asset(null)
-                .balance(BigDecimal.valueOf(1000000))
-                .lockedBalance(BigDecimal.ZERO)
-                .build());
+        // 4. 원화 지갑 생성 또는 잔액 강제 동기화 (잔액: 1,000,000원)
+        walletRepository.findKrwWalletByUserId(testUser.getId())
+                .map(existingWallet -> {
+                    existingWallet.updateBalance(BigDecimal.valueOf(1000000), BigDecimal.ZERO);
+                    return walletRepository.save(existingWallet);
+                })
+                .orElseGet(() -> walletRepository.save(Wallet.builder()
+                        .user(testUser)
+                        .asset(null)
+                        .balance(BigDecimal.valueOf(1000000))
+                        .lockedBalance(BigDecimal.ZERO)
+                        .build()));
+
+        // 5. 기존 자산 지갑이 있다면 잔고 0으로 강제 초기화
+        walletRepository.findByUserIdAndAssetId(testUser.getId(), testAsset.getId())
+                .ifPresent(w -> {
+                    w.updateBalance(BigDecimal.ZERO, BigDecimal.ZERO);
+                    walletRepository.save(w);
+                });
     }
 
     @Test

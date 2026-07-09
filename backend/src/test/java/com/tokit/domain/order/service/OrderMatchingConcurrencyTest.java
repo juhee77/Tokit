@@ -71,23 +71,21 @@ class OrderMatchingConcurrencyTest {
         tradeRepository.deleteAll();
         orderRepository.deleteAll();
         walletRepository.deleteAll();
-        assetRepository.deleteAll();
-        issuerRepository.deleteAll();
-        userRepository.deleteAll();
 
         // Mock blockchain operations to prevent actual RPC calls during concurrent matching test
         doNothing().when(contractService).handleTransferByPartition(any(), any(), any(), any(), any());
 
+        String uniqueId = java.util.UUID.randomUUID().toString();
         // 2. Setup Issuer & Asset (status: "거래중")
         Issuer issuer = issuerRepository.save(Issuer.builder()
                 .companyName("Test Concurrency Issuer")
-                .bizRegNo("123-CONCURRENCY")
+                .bizRegNo("123-CONCURRENCY-" + uniqueId)
                 .build());
 
         testAsset = assetRepository.save(Asset.builder()
                 .issuer(issuer)
                 .name("Test Concurrency Asset")
-                .symbol("TEST-CONCUR")
+                .symbol("TCON-" + uniqueId.substring(0, 5))
                 .totalSupply(BigDecimal.valueOf(1000000))
                 .issuePrice(BigDecimal.valueOf(10000))
                 .status("거래중")
@@ -98,7 +96,7 @@ class OrderMatchingConcurrencyTest {
         for (int i = 1; i <= 10; i++) {
             User buyer = userRepository.save(User.builder()
                     .name("Buyer " + i)
-                    .email("buyer" + i + "@test.com")
+                    .email("buyer-" + uniqueId + "-" + i + "@test.com")
                     .walletAddress("0xBuyerWalletAddress" + i)
                     .kycStatus(true)
                     .build());
@@ -114,7 +112,7 @@ class OrderMatchingConcurrencyTest {
 
             User seller = userRepository.save(User.builder()
                     .name("Seller " + i)
-                    .email("seller" + i + "@test.com")
+                    .email("seller-" + uniqueId + "-" + i + "@test.com")
                     .walletAddress("0xSellerWalletAddress" + i)
                     .kycStatus(true)
                     .build());
@@ -143,9 +141,6 @@ class OrderMatchingConcurrencyTest {
         tradeRepository.deleteAll();
         orderRepository.deleteAll();
         walletRepository.deleteAll();
-        assetRepository.deleteAll();
-        issuerRepository.deleteAll();
-        userRepository.deleteAll();
     }
 
     @Test

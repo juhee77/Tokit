@@ -35,12 +35,12 @@ class WalletConcurrencyTest {
     @BeforeEach
     void setUp() {
         walletRepository.deleteAll();
-        userRepository.deleteAll();
 
+        String uniqueId = java.util.UUID.randomUUID().toString();
         testUser = userRepository.save(User.builder()
                 .name("Test User")
-                .email("test.concurrency@tokit.com")
-                .walletAddress("0xCONCURRENCY_TEST")
+                .email("test.concurrency-" + uniqueId + "@tokit.com")
+                .walletAddress("0xCONCURRENCY_TEST-" + uniqueId.substring(0, 10))
                 .kycStatus(true)
                 .build());
 
@@ -55,7 +55,6 @@ class WalletConcurrencyTest {
     @AfterEach
     void tearDown() {
         walletRepository.deleteAll();
-        userRepository.deleteAll();
     }
 
     @Test
