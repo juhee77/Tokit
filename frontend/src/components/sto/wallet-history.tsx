@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useCallback } from "react"
 import { cn } from "@/lib/utils"
 import { Wallet, Lock, ArrowUpRight, ArrowDownRight, X, ArrowRight, Building2, Loader2 } from "lucide-react"
 import { fetchApi } from "@/lib/api"
@@ -135,78 +135,163 @@ export function WalletHistory() {
   const [activeTab, setActiveTab] = useState<"assets" | "orders">("assets")
   const [loading, setLoading] = useState(true)
 
+  // 가스리스 이체(무상 양도) 모달 관련 상태
+  const [isTransferModalOpen, setIsTransferModalOpen] = useState(false)
+  const [transferToken, setTransferToken] = useState<TokenHolding | null>(null)
+  const [toAddress, setToAddress] = useState('')
+  const [transferAmount, setTransferAmount] = useState('')
+  const [transferLoading, setTransferLoading] = useState(false)
+  const [currentUserAddress, setCurrentUserAddress] = useState('0x70997970C51812dc3A010C7d01b50e0d17dc79C8') // default
+
+  const loadWalletData = useCallback(async (savedId: number) => {
+    setLoading(true)
+    try {
+      const res = await fetchApi<any>(`/api/users/${savedId}/mypage`)
+      if (res && res.user && res.user.walletAddress) {
+        setCurrentUserAddress(res.user.walletAddress)
+      }
+      if (res && res.wallets) {
+        const krwWallet = res.wallets.find((w: any) => w.assetSymbol === "KRW" || !w.assetSymbol)
+        const availableBalance = krwWallet ? krwWallet.balance : 0
+        const lockedBalance = krwWallet ? krwWallet.lockedBalance : 0
+        
+        const tokenHoldings: TokenHolding[] = res.wallets
+          .filter((w: any) => w.assetSymbol && w.assetSymbol !== "KRW")
+          .map((w: any) => {
+            const symbol = w.assetSymbol
+            const meta = tokenMetadata[symbol] || { name: `${symbol} 토큰증권`, currentPrice: 10000, averagePrice: 10000 }
+            const quantity = w.balance + w.lockedBalance
+            const value = quantity * meta.currentPrice
+            const changePercent = symbol === "BSND" ? -8.24 : symbol === "HDYT" ? 1.2 : symbol === "JJIS" ? 2.5 : symbol === "GNPM" ? 25.0 : 0.0
+            const change = value * (changePercent / (100 + changePercent))
+            
+            return {
+              symbol,
+              name: meta.name,
+              quantity,
+              averagePrice: meta.averagePrice,
+              currentPrice: meta.currentPrice,
+              value,
+              change,
+              changePercent
+            }
+          })
+
+        const totalTokenValue = tokenHoldings.reduce((sum, t) => sum + t.value, 0)
+        
+        setAssets({
+          totalBalance: availableBalance + lockedBalance,
+          availableBalance,
+          lockedBalance,
+          totalTokenValue,
+          tokens: tokenHoldings
+        })
+      }
+      
+      if (res && res.orders) {
+        const mappedOrders: OrderHistory[] = res.orders.map((o: any) => ({
+          id: o.id.toString(),
+          symbol: o.assetSymbol,
+          side: o.orderType.toLowerCase() as "buy" | "sell",
+          type: "limit",
+          price: o.price,
+          quantity: o.quantity,
+          filledQuantity: o.quantity - o.remainingQuantity,
+          status: o.status === "OPEN" ? "pending" : o.status === "PARTIAL" ? "partial" : o.status === "FILLED" ? "filled" : "cancelled",
+          createdAt: new Date(o.createdAt)
+        }))
+        setOrders(mappedOrders)
+      }
+    } catch (e) {
+      console.error("Failed to fetch wallet page data:", e)
+    } finally {
+      setLoading(false)
+    }
+  }, [])
+
   useEffect(() => {
     let savedId = 1
     if (typeof window !== "undefined") {
       const raw = localStorage.getItem("tokit_userId")
       if (raw) savedId = parseInt(raw, 10)
     }
+    loadWalletData(savedId)
+  }, [loadWalletData])
 
-    const loadWalletData = async () => {
-      setLoading(true)
-      try {
-        const res = await fetchApi<any>(`/api/users/${savedId}/mypage`)
-        if (res && res.wallets) {
-          const krwWallet = res.wallets.find((w: any) => w.assetSymbol === "KRW" || !w.assetSymbol)
-          const availableBalance = krwWallet ? krwWallet.balance : 0
-          const lockedBalance = krwWallet ? krwWallet.lockedBalance : 0
-          
-          const tokenHoldings: TokenHolding[] = res.wallets
-            .filter((w: any) => w.assetSymbol && w.assetSymbol !== "KRW")
-            .map((w: any) => {
-              const symbol = w.assetSymbol
-              const meta = tokenMetadata[symbol] || { name: `${symbol} 토큰증권`, currentPrice: 10000, averagePrice: 10000 }
-              const quantity = w.balance + w.lockedBalance
-              const value = quantity * meta.currentPrice
-              const changePercent = symbol === "BSND" ? -8.24 : symbol === "HDYT" ? 1.2 : symbol === "JJIS" ? 2.5 : symbol === "GNPM" ? 25.0 : 0.0
-              const change = value * (changePercent / (100 + changePercent))
-              
-              return {
-                symbol,
-                name: meta.name,
-                quantity,
-                averagePrice: meta.averagePrice,
-                currentPrice: meta.currentPrice,
-                value,
-                change,
-                changePercent
-              }
-            })
+  const handleRelayTransfer = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!transferToken || !toAddress.trim() || !transferAmount.trim()) return
 
-          const totalTokenValue = tokenHoldings.reduce((sum, t) => sum + t.value, 0)
-          
-          setAssets({
-            totalBalance: availableBalance + lockedBalance,
-            availableBalance,
-            lockedBalance,
-            totalTokenValue,
-            tokens: tokenHoldings
-          })
-        }
-        
-        if (res && res.orders) {
-          const mappedOrders: OrderHistory[] = res.orders.map((o: any) => ({
-            id: o.id.toString(),
-            symbol: o.assetSymbol,
-            side: o.orderType.toLowerCase() as "buy" | "sell",
-            type: "limit",
-            price: o.price,
-            quantity: o.quantity,
-            filledQuantity: o.quantity - o.remainingQuantity,
-            status: o.status === "OPEN" ? "pending" : o.status === "PARTIAL" ? "partial" : o.status === "FILLED" ? "filled" : "cancelled",
-            createdAt: new Date(o.createdAt)
-          }))
-          setOrders(mappedOrders)
-        }
-      } catch (e) {
-        console.error("Failed to fetch wallet page data:", e)
-      } finally {
-        setLoading(false)
-      }
+    const amountVal = parseFloat(transferAmount)
+    if (isNaN(amountVal) || amountVal <= 0) {
+      alert("올바른 이체 수량을 입력해주세요.")
+      return
     }
 
-    loadWalletData()
-  }, [])
+    if (amountVal > transferToken.quantity) {
+      alert("보유 수량이 부족합니다.")
+      return
+    }
+
+    setTransferLoading(true)
+    try {
+      // 1. Get Nonce from Backend
+      const nonceRes = await fetchApi<any>(`/api/relayer/nonce/${currentUserAddress}`)
+      const nonce = nonceRes.nonce
+
+      // 2. Format plain message
+      const plainMessage = currentUserAddress.toLowerCase() + ":" +
+                           toAddress.toLowerCase() + ":" +
+                           transferToken.symbol + ":" +
+                           amountVal.toString() + ":" +
+                           nonce
+
+      // 3. Request personal_sign from MetaMask
+      let signature = ""
+      if (typeof window !== "undefined" && (window as any).ethereum) {
+        try {
+          await (window as any).ethereum.request({ method: 'eth_requestAccounts' })
+          signature = await (window as any).ethereum.request({
+            method: 'personal_sign',
+            params: [plainMessage, currentUserAddress],
+          })
+        } catch (signErr: any) {
+          throw new Error("지갑 서명 승인이 취소되었거나 실패했습니다: " + signErr.message)
+        }
+      } else {
+        throw new Error("MetaMask 등 Web3 지갑이 감지되지 않았습니다. 브라우저 지갑 확장을 설치한 후 이체를 승인해주세요.")
+      }
+
+      // 4. Send relay transfer request to backend
+      await fetchApi<any>('/api/relayer/transfer', {
+        method: 'POST',
+        body: JSON.stringify({
+          fromAddress: currentUserAddress,
+          toAddress: toAddress,
+          assetSymbol: transferToken.symbol,
+          amount: amountVal,
+          nonce: nonce,
+          signature: signature
+        })
+      })
+
+      alert("가스비 대납 이체(무상 양도)가 온체인에서 성공적으로 완료되었습니다!")
+      setIsTransferModalOpen(false)
+      setToAddress('')
+      setTransferAmount('')
+      
+      let savedId = 1
+      if (typeof window !== "undefined") {
+        const raw = localStorage.getItem("tokit_userId")
+        if (raw) savedId = parseInt(raw, 10)
+      }
+      loadWalletData(savedId)
+    } catch (err: any) {
+      alert(err.message || "이체 요청 중 오류가 발생했습니다.")
+    } finally {
+      setTransferLoading(false)
+    }
+  }
 
   const formatKRW = (value: number) => {
     if (Math.abs(value) >= 100000000) {
@@ -334,7 +419,7 @@ export function WalletHistory() {
                       </p>
                     </div>
                   </div>
-                  <div className="text-right">
+                  <div className="text-right flex flex-col items-end gap-2 shrink-0">
                     <p className="font-semibold text-foreground font-mono">{formatKRW(token.value)}</p>
                     <div className={cn(
                       "flex items-center justify-end gap-1 text-sm",
@@ -350,6 +435,18 @@ export function WalletHistory() {
                         ({token.change >= 0 ? "+" : ""}{formatKRW(token.change)})
                       </span>
                     </div>
+                    {token.quantity > 0 && (
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          setTransferToken(token)
+                          setIsTransferModalOpen(true)
+                        }}
+                        className="mt-1 px-3 py-1 bg-secondary/15 hover:bg-secondary/25 text-secondary border border-secondary/25 hover:border-secondary/40 rounded-lg text-xs font-bold transition-all cursor-pointer"
+                      >
+                        무상 양도
+                      </button>
+                    )}
                   </div>
                 </div>
               </div>
@@ -459,6 +556,117 @@ export function WalletHistory() {
           </>
         )}
       </div>
+
+      {/* Gasless Transfer Modal */}
+      {isTransferModalOpen && transferToken && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-card border border-outline-variant rounded-2xl w-full max-w-md shadow-2xl overflow-hidden flex flex-col animate-in fade-in zoom-in-95 duration-200">
+            {/* Modal Header */}
+            <div className="p-4 border-b border-outline-variant flex justify-between items-center bg-surface-container-low">
+              <div className="flex items-center gap-2">
+                <Building2 className="w-5 h-5 text-secondary" />
+                <h3 className="font-bold text-foreground text-sm">토큰증권 안전 이체 (수수료 면제)</h3>
+              </div>
+              <button
+                onClick={() => {
+                  setIsTransferModalOpen(false)
+                  setToAddress('')
+                  setTransferAmount('')
+                }}
+                className="p-1 rounded-lg hover:bg-surface-container transition-colors text-muted-foreground hover:text-foreground cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Modal Body */}
+            <form onSubmit={handleRelayTransfer} className="p-5 flex flex-col gap-4">
+              {/* Asset Info Card */}
+              <div className="p-3 bg-surface-container-low border border-outline-variant rounded-xl flex justify-between items-center">
+                <div>
+                  <p className="text-xs text-muted-foreground">양도 종목</p>
+                  <p className="text-sm font-bold text-foreground">{transferToken.name} ({transferToken.symbol})</p>
+                </div>
+                <div className="text-right">
+                  <p className="text-xs text-muted-foreground">보유 수량</p>
+                  <p className="text-sm font-bold text-secondary font-mono">{transferToken.quantity.toLocaleString()} 주</p>
+                </div>
+              </div>
+
+              {/* To Address Input */}
+              <div className="flex flex-col gap-1.5">
+                <label className="text-xs font-bold text-foreground">수신자 지갑 주소</label>
+                <input
+                  type="text"
+                  required
+                  placeholder="0x로 시작하는 수신자 주소 입력..."
+                  value={toAddress}
+                  onChange={e => setToAddress(e.target.value)}
+                  className="w-full px-3 py-2 bg-surface-container-low border border-outline-variant rounded-xl text-sm focus:outline-none focus:border-secondary text-foreground font-mono placeholder:text-muted-foreground placeholder:font-sans"
+                />
+              </div>
+
+              {/* Amount Input */}
+              <div className="flex flex-col gap-1.5">
+                <label className="text-xs font-bold text-foreground">양도 수량 (주)</label>
+                <div className="relative">
+                  <input
+                    type="number"
+                    required
+                    min="1"
+                    step="1"
+                    placeholder="양도할 주식 수량..."
+                    value={transferAmount}
+                    onChange={e => setTransferAmount(e.target.value)}
+                    className="w-full px-3 py-2 pr-16 bg-surface-container-low border border-outline-variant rounded-xl text-sm focus:outline-none focus:border-secondary text-foreground font-mono placeholder:text-muted-foreground placeholder:font-sans"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setTransferAmount(transferToken.quantity.toString())}
+                    className="absolute right-2 top-1.5 px-2 py-1 bg-surface-container hover:bg-surface-container-high rounded text-[10px] font-bold text-secondary border border-outline-variant hover:border-secondary transition-all cursor-pointer"
+                  >
+                    최대
+                  </button>
+                </div>
+              </div>
+
+              {/* Compliance Warning */}
+              <div className="p-3 bg-secondary/5 border border-secondary/10 rounded-xl text-[11px] text-muted-foreground leading-relaxed">
+                📢 **수수료 전액 면제 안내**: 본 토큰증권 이체 서비스는 거래 수수료가 전액 면제되며, 지갑 서명 승인 즉시 블록체인 분산원장에 실시간으로 안전하게 기록됩니다.
+              </div>
+
+              {/* Action Buttons */}
+              <div className="flex gap-3 pt-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsTransferModalOpen(false)
+                    setToAddress('')
+                    setTransferAmount('')
+                  }}
+                  className="flex-1 py-2.5 bg-surface-container hover:bg-surface-container-high rounded-xl text-sm font-bold text-foreground transition-all cursor-pointer"
+                >
+                  취소
+                </button>
+                <button
+                  type="submit"
+                  disabled={transferLoading}
+                  className="flex-1 py-2.5 bg-primary hover:opacity-90 disabled:opacity-50 rounded-xl text-sm font-bold text-primary-foreground transition-all flex items-center justify-center gap-2 cursor-pointer"
+                >
+                  {transferLoading ? (
+                    <>
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                      이체 처리 중...
+                    </>
+                  ) : (
+                    "이체 승인"
+                  )}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

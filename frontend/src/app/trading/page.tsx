@@ -6,7 +6,7 @@ import { Orderbook } from "@/components/sto/orderbook"
 import { OrderForm } from "@/components/sto/order-form"
 import { CandlestickChart } from "@/components/sto/candlestick-chart"
 import { cn } from "@/lib/utils"
-import { TrendingUp, TrendingDown, Activity, ChevronDown } from "lucide-react"
+import { TrendingUp, TrendingDown, Activity, ChevronDown, MessageSquare, ChevronRight } from "lucide-react"
 
 import { useTradeStore } from "@/stores/useTradeStore"
 import { useOrderBookStream } from "@/hooks/useOrderBookStream"
@@ -83,6 +83,26 @@ function TradingContent() {
 
   const [initializing, setInitializing] = useState(true)
   const [selectedPrice, setSelectedPrice] = useState<number | undefined>()
+  
+  // 토론방 탭 관련 상태 및 비동기 패치
+  const [activeRightTab, setActiveRightTab] = useState<'orderbook' | 'discussion'>('orderbook')
+  const [discussionPosts, setDiscussionPosts] = useState<any[]>([])
+  const [discussionLoading, setDiscussionLoading] = useState(false)
+  const [quickTitle, setQuickTitle] = useState('')
+  const [quickContent, setQuickContent] = useState('')
+
+  const loadDiscussionPosts = useCallback(async (assetId: number) => {
+    setDiscussionLoading(true)
+    try {
+      const pageData = await fetchApi<any>(`/api/posts?assetId=${assetId}&size=50`)
+      setDiscussionPosts(pageData.content || [])
+    } catch (e) {
+      console.error("Failed to load asset discussions:", e)
+    } finally {
+      setDiscussionLoading(false)
+    }
+  }, [])
+
   const [showTokenSelector, setShowTokenSelector] = useState(false)
   const [searchTerm, setSearchTerm] = useState("")
   const [activeCategory, setActiveCategory] = useState<"ALL" | "REAL_ESTATE" | "INFRA" | "ART_OTHER">("ALL")
@@ -153,6 +173,40 @@ function TradingContent() {
   }, [selectedSymbol, setAssets, setRecentTrades, setSelectedSymbol]);
 
   const currentAsset = assets.find((a) => a.symbol === selectedSymbol);
+
+  // 자동 데이터 로드 이펙트
+  useEffect(() => {
+    if (currentAsset && activeRightTab === 'discussion') {
+      loadDiscussionPosts(currentAsset.id)
+    }
+  }, [currentAsset, activeRightTab, loadDiscussionPosts])
+
+  const handleCreateQuickPost = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!currentAsset || !quickTitle.trim() || !quickContent.trim()) return
+
+    const idempotencyKey = crypto.randomUUID()
+    try {
+      await fetchApi<any>('/api/posts', {
+        method: 'POST',
+        headers: {
+          'X-Idempotency-Key': idempotencyKey,
+        },
+        body: JSON.stringify({
+          title: quickTitle,
+          content: quickContent,
+          userId: userId,
+          assetId: currentAsset.id,
+        }),
+      })
+
+      setQuickTitle('')
+      setQuickContent('')
+      loadDiscussionPosts(currentAsset.id)
+    } catch (err: any) {
+      alert(err.message || 'Failed to post discussion.')
+    }
+  }
 
   const filteredAssets = assets.filter((asset) => {
     const matchesSearch = asset.symbol.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -404,15 +458,119 @@ function TradingContent() {
           </div>
         </div>
 
-        {/* Right Section: Orderbook (4 cols) */}
-        <div className="lg:col-span-4">
-          <Orderbook 
-            symbol={selectedSymbol} 
-            lastPrice={tokenStats.currentPrice}
-            priceChange={tokenStats.change}
-            priceChangePercent={tokenStats.changePercent}
-            onPriceSelect={setSelectedPrice}
-          />
+        {/* Right Section: Orderbook or Discussion (4 cols) */}
+        <div className="lg:col-span-4 flex flex-col bg-card border border-outline-variant rounded shadow-sm overflow-hidden h-[600px]">
+          {/* Tab Header */}
+          <div className="flex border-b border-outline-variant bg-surface-container-low shrink-0">
+            <button
+              onClick={() => setActiveRightTab('orderbook')}
+              className={cn(
+                "flex-1 py-3 text-sm font-bold text-center border-b-2 transition-all cursor-pointer",
+                activeRightTab === 'orderbook'
+                  ? "border-primary text-primary bg-card"
+                  : "border-transparent text-muted-foreground hover:text-foreground"
+              )}
+            >
+              호가 분석
+            </button>
+            <button
+              onClick={() => setActiveRightTab('discussion')}
+              className={cn(
+                "flex-1 py-3 text-sm font-bold text-center border-b-2 transition-all cursor-pointer",
+                activeRightTab === 'discussion'
+                  ? "border-primary text-primary bg-card"
+                  : "border-transparent text-muted-foreground hover:text-foreground"
+              )}
+            >
+              실시간 토론
+            </button>
+          </div>
+
+          {/* Tab Content */}
+          <div className="flex-1 overflow-y-auto">
+            {activeRightTab === 'orderbook' ? (
+              <Orderbook 
+                symbol={selectedSymbol} 
+                lastPrice={tokenStats.currentPrice}
+                priceChange={tokenStats.change}
+                priceChangePercent={tokenStats.changePercent}
+                onPriceSelect={setSelectedPrice}
+              />
+            ) : (
+              <div className="p-4 flex flex-col h-full gap-4">
+                {/* Community Direct Link */}
+                <div className="flex justify-between items-center bg-primary/5 border border-primary/10 rounded-xl p-3 shrink-0">
+                  <span className="text-xs text-muted-foreground">더 많은 의견을 보려면?</span>
+                  <a
+                    href="/community"
+                    className="text-xs text-primary font-bold hover:underline flex items-center gap-0.5"
+                  >
+                    커뮤니티 바로가기
+                    <ChevronRight size={14} />
+                  </a>
+                </div>
+
+                {/* Quick Write Form */}
+                <form onSubmit={handleCreateQuickPost} className="flex flex-col gap-2 p-3 bg-surface-container-low border border-outline-variant rounded-xl shrink-0">
+                  <input
+                    type="text"
+                    required
+                    placeholder="토론 제목..."
+                    value={quickTitle}
+                    onChange={e => setQuickTitle(e.target.value)}
+                    className="w-full px-3 py-1.5 bg-background border border-outline-variant rounded-lg text-xs focus:outline-none focus:border-primary text-foreground placeholder:text-muted-foreground"
+                  />
+                  <div className="flex gap-2">
+                    <input
+                      type="text"
+                      required
+                      placeholder="의견을 자유롭게 입력하세요..."
+                      value={quickContent}
+                      onChange={e => setQuickContent(e.target.value)}
+                      className="flex-1 px-3 py-1.5 bg-background border border-outline-variant rounded-lg text-xs focus:outline-none focus:border-primary text-foreground placeholder:text-muted-foreground"
+                    />
+                    <button
+                      type="submit"
+                      className="px-3 py-1.5 bg-primary text-primary-foreground rounded-lg text-xs font-bold hover:opacity-90 transition-all cursor-pointer"
+                    >
+                      등록
+                    </button>
+                  </div>
+                </form>
+
+                {/* Discussion List */}
+                <div className="flex-1 flex flex-col gap-3 min-h-0">
+                  {discussionLoading ? (
+                    <div className="flex-grow flex flex-col justify-center items-center gap-2 py-10">
+                      <div className="w-6 h-6 border-2 border-primary border-t-transparent rounded-full animate-spin"></div>
+                      <span className="text-xs text-muted-foreground">로딩 중...</span>
+                    </div>
+                  ) : discussionPosts.length === 0 ? (
+                    <div className="flex-grow flex flex-col justify-center items-center py-10 text-center">
+                      <MessageSquare className="text-muted-foreground mb-2" size={24} />
+                      <p className="text-xs text-muted-foreground">첫 의견을 작성해 보세요!</p>
+                    </div>
+                  ) : (
+                    <div className="flex-grow overflow-y-auto space-y-3 pr-1 max-h-[300px]">
+                      {discussionPosts.map(post => (
+                        <div key={post.id} className="p-3 bg-surface-container-low border border-outline-variant rounded-xl flex flex-col gap-1.5 hover:border-primary/30 transition-all">
+                          <div className="flex justify-between items-center text-[10px] text-muted-foreground">
+                            <span className="font-semibold text-foreground">{post.userName}</span>
+                            <span>{new Date(post.createdAt).toLocaleDateString()}</span>
+                          </div>
+                          <h4 className="text-xs font-bold text-foreground line-clamp-1">{post.title}</h4>
+                          <p className="text-[11px] text-muted-foreground line-clamp-2 leading-relaxed">{post.content}</p>
+                          <div className="flex justify-end pt-1 border-t border-outline-variant/30 text-[9px] text-primary font-bold">
+                            댓글 {post.commentsCount}개
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+          </div>
         </div>
       </div>
     </div>
