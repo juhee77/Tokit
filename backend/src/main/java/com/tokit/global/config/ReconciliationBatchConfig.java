@@ -126,7 +126,7 @@ public class ReconciliationBatchConfig extends DefaultBatchConfiguration {
     }
 
     private void sendAlertNotification(ReconciliationLog logEntry) {
-        String title = "CRITICAL: 온-오프체인 데이터 불일치 감지";
+        String title = "[긴급] 온-오프체인 분산원장 불일치 감사 감지";
         String message = String.format(
                 "사용자: %s (%s)\n" +
                 "자산: %s\n" +
@@ -143,7 +143,7 @@ public class ReconciliationBatchConfig extends DefaultBatchConfiguration {
                 logEntry.getCheckedAt()
         );
 
-        log.error("[CRITICAL ALERT] [Reconciliation Auditing Discrepancy] " +
+        log.error("[원장 불일치 감사 감지] [Reconciliation Discrepancy Alert] " +
                 "Balance discrepancy of {} units of {} found for User: {} (Wallet: {}). " +
                 "Offchain = {}, Onchain = {}. Alert logged at {}",
                 logEntry.getDifference(),

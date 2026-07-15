@@ -82,7 +82,7 @@ public class RelayerService {
                 nonce;
 
         if (!verifyEthereumSignature(plainMessage, signature, fromAddress)) {
-            throw new IllegalArgumentException("이더리움 서명 검증에 실패했습니다.");
+            throw new IllegalArgumentException("원장 이체 전자서명 인증에 실패했습니다.");
         }
 
         relayerNonce.checkAndIncrementLimit();
@@ -129,7 +129,7 @@ public class RelayerService {
                 amount
         );
 
-        log.info("Successfully relayed gasless transfer on-chain.");
+        log.info("Successfully completed compliance-approved gas-exempt transfer on-chain.");
     }
 
     private boolean verifyEthereumSignature(String message, String signature, String expectedAddress) {
