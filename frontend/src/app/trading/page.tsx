@@ -6,12 +6,13 @@ import { Orderbook } from "@/components/sto/orderbook"
 import { OrderForm } from "@/components/sto/order-form"
 import { CandlestickChart } from "@/components/sto/candlestick-chart"
 import { cn } from "@/lib/utils"
-import { TrendingUp, TrendingDown, Activity, ChevronDown, MessageSquare, ChevronRight } from "lucide-react"
+import { TrendingUp, TrendingDown, Activity, ChevronDown, MessageSquare, ChevronRight, Send } from "lucide-react"
 
 import { useTradeStore } from "@/stores/useTradeStore"
 import { useOrderBookStream } from "@/hooks/useOrderBookStream"
 import { useTradeStream } from "@/hooks/useTradeStream"
 import { fetchApi } from "@/lib/api"
+import { toast } from "sonner"
 import { Asset, Trade } from "@/types"
 
 interface TokenInfo {
@@ -88,7 +89,6 @@ function TradingContent() {
   const [activeRightTab, setActiveRightTab] = useState<'orderbook' | 'discussion'>('orderbook')
   const [discussionPosts, setDiscussionPosts] = useState<any[]>([])
   const [discussionLoading, setDiscussionLoading] = useState(false)
-  const [quickTitle, setQuickTitle] = useState('')
   const [quickContent, setQuickContent] = useState('')
 
   const loadDiscussionPosts = useCallback(async (assetId: number) => {
@@ -114,8 +114,34 @@ function TradingContent() {
     try {
       const res = await fetchApi<any>(`/api/users/${currentUserId}/mypage`)
       setWallets(res.wallets || [])
-    } catch (e) {
+    } catch (e: any) {
       console.error("Failed to load user wallets:", e)
+      if (e.message && (
+        e.message.includes("not found") || 
+        e.message.includes("NOT_FOUND") || 
+        e.message.includes("User not found")
+      )) {
+        try {
+          const signupRes = await fetchApi<any>("/api/users/signup", {
+            method: "POST",
+            body: JSON.stringify({
+              email: "test-investor@tokit.com",
+              name: "김토킷",
+              walletAddress: "0x70997970C51812dc3A010C7d01b50e0d17dc79C8"
+            })
+          })
+          const newId = signupRes.id
+          setUserId(newId)
+          if (typeof window !== "undefined") {
+            localStorage.setItem("tokit_userId", newId.toString())
+          }
+          // Retry loading wallets
+          const retryRes = await fetchApi<any>(`/api/users/${newId}/mypage`)
+          setWallets(retryRes.wallets || [])
+        } catch (signupErr: any) {
+          console.error("Auto signup inside wallets loader failed", signupErr)
+        }
+      }
     }
   }, [])
 
@@ -183,28 +209,66 @@ function TradingContent() {
 
   const handleCreateQuickPost = async (e: React.FormEvent) => {
     e.preventDefault()
-    if (!currentAsset || !quickTitle.trim() || !quickContent.trim()) return
+    if (!currentAsset || !quickContent.trim()) return
 
     const idempotencyKey = crypto.randomUUID()
-    try {
+    const titleText = quickContent.trim().length > 15 
+      ? quickContent.trim().slice(0, 15) + "..." 
+      : quickContent.trim()
+
+    const makePostRequest = async (targetUserId: number) => {
       await fetchApi<any>('/api/posts', {
         method: 'POST',
         headers: {
           'X-Idempotency-Key': idempotencyKey,
         },
         body: JSON.stringify({
-          title: quickTitle,
+          title: titleText,
           content: quickContent,
-          userId: userId,
+          userId: targetUserId,
           assetId: currentAsset.id,
         }),
       })
+    }
 
-      setQuickTitle('')
+    try {
+      await makePostRequest(userId)
       setQuickContent('')
       loadDiscussionPosts(currentAsset.id)
+      toast.success("의견이 성공적으로 등록되었습니다.")
     } catch (err: any) {
-      alert(err.message || 'Failed to post discussion.')
+      if (err.message && (
+        err.message.includes("not found") || 
+        err.message.includes("NOT_FOUND") || 
+        err.message.includes("User not found")
+      )) {
+        try {
+          // Auto signup
+          const signupRes = await fetchApi<any>("/api/users/signup", {
+            method: "POST",
+            body: JSON.stringify({
+              email: "test-investor@tokit.com",
+              name: "김토킷",
+              walletAddress: "0x70997970C51812dc3A010C7d01b50e0d17dc79C8"
+            })
+          })
+          const newId = signupRes.id
+          setUserId(newId)
+          if (typeof window !== "undefined") {
+            localStorage.setItem("tokit_userId", newId.toString())
+          }
+          // Retry posting
+          await makePostRequest(newId)
+          setQuickContent('')
+          loadDiscussionPosts(currentAsset.id)
+          toast.success("김토킷 테스트 계정이 생성되고 의견이 등록되었습니다!")
+        } catch (signupErr: any) {
+          console.error("Auto signup failed", signupErr)
+          toast.error("유저 가입 실패: " + signupErr.message)
+        }
+      } else {
+        toast.error("의견 등록 실패: " + err.message)
+      }
     }
   }
 
@@ -511,31 +575,22 @@ function TradingContent() {
                 </div>
 
                 {/* Quick Write Form */}
-                <form onSubmit={handleCreateQuickPost} className="flex flex-col gap-2 p-3 bg-surface-container-low border border-outline-variant rounded-xl shrink-0">
+                <form onSubmit={handleCreateQuickPost} className="flex items-center gap-2 p-2 bg-background border border-outline-variant rounded-xl shrink-0 focus-within:ring-2 focus-within:ring-primary/30 focus-within:border-primary transition-all">
                   <input
                     type="text"
                     required
-                    placeholder="토론 제목..."
-                    value={quickTitle}
-                    onChange={e => setQuickTitle(e.target.value)}
-                    className="w-full px-3 py-1.5 bg-background border border-outline-variant rounded-lg text-xs focus:outline-none focus:border-primary text-foreground placeholder:text-muted-foreground"
+                    placeholder="실시간 토론에 참여해 보세요..."
+                    value={quickContent}
+                    onChange={e => setQuickContent(e.target.value)}
+                    className="flex-1 px-2.5 py-1 bg-transparent border-none outline-none text-xs text-foreground placeholder:text-muted-foreground focus:ring-0 focus:outline-none"
                   />
-                  <div className="flex gap-2">
-                    <input
-                      type="text"
-                      required
-                      placeholder="의견을 자유롭게 입력하세요..."
-                      value={quickContent}
-                      onChange={e => setQuickContent(e.target.value)}
-                      className="flex-1 px-3 py-1.5 bg-background border border-outline-variant rounded-lg text-xs focus:outline-none focus:border-primary text-foreground placeholder:text-muted-foreground"
-                    />
-                    <button
-                      type="submit"
-                      className="px-3 py-1.5 bg-primary text-primary-foreground rounded-lg text-xs font-bold hover:opacity-90 transition-all cursor-pointer"
-                    >
-                      등록
-                    </button>
-                  </div>
+                  <button
+                    type="submit"
+                    className="p-2 bg-primary text-primary-foreground rounded-lg hover:bg-primary/95 transition-all flex items-center justify-center shrink-0 cursor-pointer shadow-sm"
+                    title="의견 등록"
+                  >
+                    <Send size={12} className="fill-current" />
+                  </button>
                 </form>
 
                 {/* Discussion List */}

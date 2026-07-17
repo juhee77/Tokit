@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
+import Link from 'next/link'
 import { fetchApi } from '@/lib/api'
 import { MessageSquare, Calendar, User, Search, Plus, Trash2, X, ChevronRight } from 'lucide-react'
 
@@ -52,20 +53,20 @@ export default function CommunityPage() {
   const [activeTab, setActiveTab] = useState<'all' | 'free' | 'sto'>('all')
 
   // Modals
-  const [isWriteModalOpen, setIsWriteModalOpen] = useState(false)
   const [selectedPost, setSelectedPost] = useState<PostResponse | null>(null)
   const [comments, setComments] = useState<CommentResponse[]>([])
   const [commentLoading, setCommentLoading] = useState(false)
 
   // Form states
-  const [newTitle, setNewTitle] = useState('')
-  const [newContent, setNewContent] = useState('')
-  const [newAssetId, setNewAssetId] = useState<string>('')
   const [newComment, setNewComment] = useState('')
 
-  const currentUserId = 1 // Mock user session (ID=1, '김토킷')
+  const [currentUserId, setCurrentUserId] = useState<number>(1)
 
   useEffect(() => {
+    if (typeof window !== "undefined") {
+      const raw = localStorage.getItem("tokit_userId")
+      if (raw) setCurrentUserId(parseInt(raw, 10))
+    }
     loadAssets()
     loadPosts()
   }, [])
@@ -110,36 +111,7 @@ export default function CommunityPage() {
     }
   }
 
-  const handleCreatePost = async (e: React.FormEvent) => {
-    e.preventDefault()
-    if (!newTitle.trim() || !newContent.trim()) return
 
-    const idempotencyKey = crypto.randomUUID()
-    try {
-      const assetIdVal = newAssetId ? parseInt(newAssetId) : null
-      await fetchApi<PostResponse>('/api/posts', {
-        method: 'POST',
-        headers: {
-          'X-Idempotency-Key': idempotencyKey,
-        },
-        body: JSON.stringify({
-          title: newTitle,
-          content: newContent,
-          userId: currentUserId,
-          assetId: assetIdVal,
-        }),
-      })
-
-      // Reset form & close modal
-      setNewTitle('')
-      setNewContent('')
-      setNewAssetId('')
-      setIsWriteModalOpen(false)
-      loadPosts()
-    } catch (err: any) {
-      alert(err.message || 'Failed to publish post.')
-    }
-  }
 
   const handleDeletePost = async (postId: number) => {
     if (!confirm('Are you sure you want to delete this post?')) return
@@ -148,7 +120,6 @@ export default function CommunityPage() {
       await fetchApi<void>(`/api/posts/${postId}?userId=${currentUserId}`, {
         method: 'DELETE',
       })
-      setIsWriteModalOpen(false)
       setSelectedPost(null)
       loadPosts()
     } catch (err: any) {
@@ -231,13 +202,13 @@ export default function CommunityPage() {
             토큰증권 공모/거래 토론 및 자유로운 소통 공간입니다.
           </p>
         </div>
-        <button
-          onClick={() => setIsWriteModalOpen(true)}
+        <Link
+          href="/community/write"
           className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-primary text-primary-foreground font-semibold hover:opacity-90 transition-all shadow-lg shadow-primary/20 cursor-pointer"
         >
           <Plus size={18} />
           글쓰기
-        </button>
+        </Link>
       </div>
 
       {/* Filter and Search Section */}
@@ -475,81 +446,7 @@ export default function CommunityPage() {
         </div>
       )}
 
-      {/* --- Write Modal --- */}
-      {isWriteModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
-          <form onSubmit={handleCreatePost} className="bg-card border border-outline-variant rounded-2xl w-full max-w-lg p-6 flex flex-col gap-6 shadow-2xl animate-in fade-in zoom-in-95 duration-200">
-            <div className="flex justify-between items-center">
-              <h2 className="text-xl font-bold">새 게시글 작성</h2>
-              <button
-                type="button"
-                onClick={() => setIsWriteModalOpen(false)}
-                className="p-1 rounded-lg hover:bg-outline-variant text-muted-foreground hover:text-foreground cursor-pointer"
-              >
-                <X size={20} />
-              </button>
-            </div>
 
-            <div className="flex flex-col gap-4">
-              <div className="flex flex-col gap-1.5">
-                <label className="text-xs font-bold text-muted-foreground">STO 자산 선택</label>
-                <select
-                  value={newAssetId}
-                  onChange={e => setNewAssetId(e.target.value)}
-                  className="px-3 py-2 rounded-xl bg-background border border-outline-variant focus:outline-none focus:border-primary text-sm cursor-pointer"
-                >
-                  <option value="">자유주제 (자산 매핑 없음)</option>
-                  {assets.map(asset => (
-                    <option key={asset.id} value={asset.id}>
-                      {asset.name} ({asset.symbol})
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              <div className="flex flex-col gap-1.5">
-                <label className="text-xs font-bold text-muted-foreground">제목</label>
-                <input
-                  type="text"
-                  required
-                  placeholder="제목을 입력하세요..."
-                  value={newTitle}
-                  onChange={e => setNewTitle(e.target.value)}
-                  className="px-3 py-2.5 rounded-xl bg-background border border-outline-variant focus:outline-none focus:border-primary text-sm"
-                />
-              </div>
-
-              <div className="flex flex-col gap-1.5">
-                <label className="text-xs font-bold text-muted-foreground">내용</label>
-                <textarea
-                  required
-                  rows={6}
-                  placeholder="토론 또는 나누고 싶은 의견을 자유롭게 적어주세요..."
-                  value={newContent}
-                  onChange={e => setNewContent(e.target.value)}
-                  className="px-3 py-2.5 rounded-xl bg-background border border-outline-variant focus:outline-none focus:border-primary text-sm resize-none"
-                />
-              </div>
-            </div>
-
-            <div className="flex gap-3 justify-end">
-              <button
-                type="button"
-                onClick={() => setIsWriteModalOpen(false)}
-                className="px-4 py-2 rounded-xl border border-outline-variant text-sm font-semibold hover:bg-outline-variant transition-all cursor-pointer"
-              >
-                취소
-              </button>
-              <button
-                type="submit"
-                className="px-5 py-2 rounded-xl bg-primary text-primary-foreground text-sm font-semibold hover:opacity-90 transition-all cursor-pointer"
-              >
-                등록하기
-              </button>
-            </div>
-          </form>
-        </div>
-      )}
     </div>
   )
 }

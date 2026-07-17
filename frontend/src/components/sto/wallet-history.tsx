@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback } from "react"
 import { cn } from "@/lib/utils"
 import { Wallet, Lock, ArrowUpRight, ArrowDownRight, X, ArrowRight, Building2, Loader2 } from "lucide-react"
 import { fetchApi } from "@/lib/api"
+import { toast } from "sonner"
 
 interface AssetData {
   totalBalance: number
@@ -202,8 +203,35 @@ export function WalletHistory() {
         }))
         setOrders(mappedOrders)
       }
-    } catch (e) {
+    } catch (e: any) {
       console.error("Failed to fetch wallet page data:", e)
+      if (e.message && (
+        e.message.includes("not found") || 
+        e.message.includes("NOT_FOUND") || 
+        e.message.includes("User not found")
+      )) {
+        try {
+          const signupRes = await fetchApi<any>("/api/users/signup", {
+            method: "POST",
+            body: JSON.stringify({
+              email: "test-investor@tokit.com",
+              name: "김토킷",
+              walletAddress: "0x70997970C51812dc3A010C7d01b50e0d17dc79C8"
+            })
+          })
+          const newId = signupRes.id
+          if (typeof window !== "undefined") {
+            localStorage.setItem("tokit_userId", newId.toString())
+          }
+          // Recursive retry
+          loadWalletData(newId)
+        } catch (signupErr: any) {
+          console.error("Auto signup inside wallet page failed", signupErr)
+          toast.error("지갑용 계정 자동 생성 실패: " + signupErr.message)
+        }
+      } else {
+        toast.error("지갑 데이터 로드 실패: " + e.message)
+      }
     } finally {
       setLoading(false)
     }
