@@ -80,11 +80,12 @@ public class OrderController {
 
     @PostMapping("/{id}/cancel")
     @Idempotent
-    @Operation(summary = "주문 취소", description = "접수되어 대기 중인 주문을 취소합니다. (Idempotency 보장)")
+    @Operation(summary = "주문 취소", description = "본인이 접수한, 대기 중인 주문을 취소합니다. (Idempotency 보장)")
     public ResponseEntity<ApiResponse<Void>> cancelOrder(
             @RequestHeader("X-Idempotency-Key") String idempotencyKey,
-            @PathVariable("id") Long id) {
-        orderService.cancelOrder(id);
+            @PathVariable("id") Long id,
+            @RequestParam("userId") Long userId) {
+        orderService.cancelOrder(id, userId);
         return ResponseEntity.ok(ApiResponse.success());
     }
 

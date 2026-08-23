@@ -84,9 +84,31 @@ public class OrderService {
     }
 
     @Transactional
-    public void cancelOrder(Long orderId) {
+    public void cancelOrder(Long orderId, Long userId) {
         Order order = orderRepository.findById(orderId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.ORDER_NOT_FOUND));
+
+        if (!order.getUserId().equals(userId)) {
+            throw new BusinessException(ErrorCode.HANDLE_ACCESS_DENIED);
+        }
+
+        if (order.getStatus() != OrderStatus.OPEN && order.getStatus() != OrderStatus.PARTIAL) {
+            throw new BusinessException(ErrorCode.ORDER_ALREADY_CLOSED);
+        }
+
+        // 미체결 잔량만큼 홀딩되어 있던 예치금/자산을 반환
+        if (order.getOrderType() == OrderType.BUY) {
+            Wallet krwWallet = walletRepository.findKrwWalletByUserIdWithPessimisticLock(order.getUserId())
+                    .orElseThrow(() -> new IllegalArgumentException("KRW 지갑을 찾을 수 없습니다."));
+            BigDecimal releaseAmount = order.getPrice().multiply(order.getRemainingQuantity());
+            krwWallet.updateBalance(krwWallet.getBalance().add(releaseAmount), krwWallet.getLockedBalance().subtract(releaseAmount));
+        } else {
+            Wallet assetWallet = walletRepository.findAssetWalletByUserIdAndAssetIdWithPessimisticLock(order.getUserId(), order.getAsset().getId())
+                    .orElseThrow(() -> new IllegalArgumentException("매도 자산 지갑을 찾을 수 없습니다."));
+            BigDecimal releaseQuantity = order.getRemainingQuantity();
+            assetWallet.updateBalance(assetWallet.getBalance().add(releaseQuantity), assetWallet.getLockedBalance().subtract(releaseQuantity));
+        }
+
         order.cancel();
     }
 

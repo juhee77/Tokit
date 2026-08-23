@@ -24,7 +24,8 @@ public enum ErrorCode {
     // Order & Matching Exceptions
     ORDER_NOT_FOUND(HttpStatus.NOT_FOUND, "O001", " Order not found"),
     INVALID_ORDER_PRICE(HttpStatus.BAD_REQUEST, "O002", " Invalid order price"),
-    INVALID_ORDER_QUANTITY(HttpStatus.BAD_REQUEST, "O003", " Invalid order quantity");
+    INVALID_ORDER_QUANTITY(HttpStatus.BAD_REQUEST, "O003", " Invalid order quantity"),
+    ORDER_ALREADY_CLOSED(HttpStatus.CONFLICT, "O004", " Order is already filled or canceled");
 
     private final HttpStatus status;
     private final String code;
