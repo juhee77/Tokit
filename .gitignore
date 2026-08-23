@@ -47,3 +47,8 @@ docker/db_data/
 docker/redis_data/
 docker/rabbitmq_data/
 backend/uploads/
+
+# Documentation & Deep-Dive Reports
+docs/*.html
+docs/tokit_backend_deep_dive.html
+

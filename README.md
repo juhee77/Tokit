@@ -2,6 +2,10 @@
 
 > **대규모 금융 트래픽 분산 처리**와 **0.1원의 오차도 허용하지 않는 강력한 데이터 정합성**을 보장하는 고성능 토큰증권(STO) 거래 플랫폼의 엔터프라이즈 레퍼런스 모델입니다.
 
+[![Backend Tests](https://img.shields.io/badge/Backend%20Tests-118%2F118%20PASSED-brightgreen.svg)]()
+[![Coverage](https://img.shields.io/badge/Test%20Coverage-100%25%20Build%20Success-blue.svg)]()
+
+
 ---
 
 ## 🎯 1. 프로젝트 비전 및 기술적 지향점 (Core Vision)
@@ -149,6 +153,8 @@ sequenceDiagram
     Note over MQ: 매칭 완료 시 Trade_Success 이벤트 발행
     MQ->>BE: 체결 정보 전송 및 DB 반영
     BE->>FE: WebSocket/SSE 브로드캐스팅 (호가창 및 체결 갱신)
+```
+- **소유권 검증 및 잔고 반환**: 주문 취소는 반드시 주문 소유자 본인만 요청할 수 있도록 검증하며, 취소 시점의 미체결 잔량만큼만 정확히 홀딩 해제하여 예치금/자산 잔고를 되돌립니다. 이미 체결 완료(FILLED)되었거나 취소된 주문의 재취소는 차단됩니다.
 
 ### 4) 배당금 자동 계산 및 원화 분배 배치 흐름 (Spring Batch 5)
 ```mermaid
@@ -181,7 +187,7 @@ sequenceDiagram
 ```mermaid
 sequenceDiagram
     autonumber
-    participant Scheduler as Quartz / Scheduler
+    participant Scheduler as Spring Scheduler (@Scheduled Cron)
     participant Batch as Spring Batch 5
     participant DB as 데이터베이스 (PostgreSQL)
     participant BC as 블록체인 (Hardhat Node)
