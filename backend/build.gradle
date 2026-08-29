@@ -52,8 +52,20 @@ dependencies {
     // Swagger / OpenAPI 3.0 Documentation
     implementation 'org.springdoc:springdoc-openapi-starter-webmvc-ui:2.8.5'
     
-    // Security (for skeleton setup)
+    // Security
     implementation 'org.springframework.boot:spring-boot-starter-security'
+
+    // Retry (온체인 호출 등 일시적 장애 대응)
+    implementation 'org.springframework.retry:spring-retry'
+
+    // Observability (health check / metrics)
+    implementation 'org.springframework.boot:spring-boot-starter-actuator'
+    implementation 'io.micrometer:micrometer-registry-prometheus'
+
+    // JWT
+    implementation 'io.jsonwebtoken:jjwt-api:0.12.6'
+    runtimeOnly 'io.jsonwebtoken:jjwt-impl:0.12.6'
+    runtimeOnly 'io.jsonwebtoken:jjwt-jackson:0.12.6'
     
     // Blockchain (Web3j)
     implementation 'org.web3j:core:4.10.3'

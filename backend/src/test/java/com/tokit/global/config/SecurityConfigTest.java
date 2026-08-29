@@ -15,7 +15,7 @@ class SecurityConfigTest {
 
     @BeforeEach
     void setUp() {
-        securityConfig = new SecurityConfig();
+        securityConfig = new SecurityConfig(null);
     }
 
     @Test

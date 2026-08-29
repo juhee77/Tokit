@@ -1,5 +1,6 @@
 'use client'
 
+import { useAuthStore } from '@/stores/useAuthStore'
 import React, { useState, useEffect, useCallback } from 'react'
 import { useRouter, useParams } from 'next/navigation'
 import Link from 'next/link'
@@ -41,7 +42,7 @@ export default function PostDetailPage() {
   // Form states
   const [newComment, setNewComment] = useState('')
 
-  const loadPostDetails = useCallback(async (userIdVal: number) => {
+  const loadPostDetails = useCallback(async () => {
     if (!postId) return
     setLoading(true)
     try {
@@ -54,57 +55,21 @@ export default function PostDetailPage() {
       setComments(commentList)
     } catch (err: any) {
       console.error('Failed to load post details:', err)
-      if (err.message && (
-        err.message.includes("not found") || 
-        err.message.includes("NOT_FOUND") || 
-        err.message.includes("User not found")
-      )) {
-        try {
-          const signupRes = await fetchApi<any>("/api/users/signup", {
-            method: "POST",
-            body: JSON.stringify({
-              email: "test-investor@tokit.com",
-              name: "김토킷",
-              walletAddress: "0x70997970C51812dc3A010C7d01b50e0d17dc79C8"
-            })
-          })
-          const newId = signupRes.id
-          setCurrentUserId(newId)
-          if (typeof window !== "undefined") {
-            localStorage.setItem("tokit_userId", newId.toString())
-          }
-          // Retry
-          const retryPost = await fetchApi<PostResponse>(`/api/posts/${postId}`)
-          setPost(retryPost)
-          const retryComments = await fetchApi<CommentResponse[]>(`/api/posts/${postId}/comments`)
-          setComments(retryComments)
-        } catch (signupErr: any) {
-          console.error("Auto signup inside read page failed", signupErr)
-          toast.error("세션 동기화 실패: " + signupErr.message)
-        }
-      } else {
         toast.error("게시글 로드 실패: " + err.message)
-      }
     } finally {
       setLoading(false)
     }
   }, [postId])
 
   useEffect(() => {
-    let savedId = 1
-    if (typeof window !== "undefined") {
-      const raw = localStorage.getItem("tokit_userId")
-      if (raw) savedId = parseInt(raw, 10)
-    }
-    setCurrentUserId(savedId)
-    loadPostDetails(savedId)
+    loadPostDetails()
   }, [loadPostDetails])
 
   const handleDeletePost = async () => {
     if (!post || !confirm('정말로 이 게시글을 삭제하시겠습니까?')) return
 
     try {
-      await fetchApi<void>(`/api/posts/${post.id}?userId=${currentUserId}`, {
+      await fetchApi<void>(`/api/posts/${post.id}`, {
         method: 'DELETE',
       })
       toast.success("게시글이 삭제되었습니다.")
@@ -128,7 +93,6 @@ export default function PostDetailPage() {
         },
         body: JSON.stringify({
           content: newComment.trim(),
-          userId: currentUserId,
         }),
       })
 
@@ -146,7 +110,7 @@ export default function PostDetailPage() {
     if (!confirm('정말로 이 댓글을 삭제하시겠습니까?')) return
 
     try {
-      await fetchApi<void>(`/api/posts/comments/${commentId}?userId=${currentUserId}`, {
+      await fetchApi<void>(`/api/posts/comments/${commentId}`, {
         method: 'DELETE',
       })
       setComments(prev => prev.filter(c => c.id !== commentId))

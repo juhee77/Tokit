@@ -82,7 +82,7 @@ class IdempotencyIntegrationTest {
     void depositKrw_Idempotency() throws Exception {
         // given
         String idempotencyKey = UUID.randomUUID().toString();
-        WalletController.WalletAmountRequest request = new WalletController.WalletAmountRequest(testUser.getId(), new BigDecimal("50000"));
+        WalletController.WalletAmountRequest request = new WalletController.WalletAmountRequest(new BigDecimal("50000"));
         String jsonRequest = objectMapper.writeValueAsString(request);
 
         int threadCount = 10;

@@ -3,13 +3,16 @@ package com.tokit.domain.user.controller;
 import com.tokit.domain.user.entity.User;
 import com.tokit.domain.user.service.UserService;
 import com.tokit.global.dto.ApiResponse;
+import com.tokit.global.security.AuthUser;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.Email;
 import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.Size;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
 import java.util.List;
 
@@ -24,6 +27,7 @@ public class UserController {
     public record SignUpRequest(
         @NotBlank(message = "Email is required") @Email(message = "Invalid email format") String email,
         @NotBlank(message = "Name is required") String name,
+        @NotBlank(message = "Password is required") @Size(min = 8, message = "Password must be at least 8 characters") String password,
         @NotBlank(message = "Wallet Address is required") String walletAddress
     ) {}
 
@@ -40,9 +44,9 @@ public class UserController {
     }
 
     @PostMapping("/signup")
-    @Operation(summary = "회원 가입", description = "이메일, 이름, 지갑 주소를 입력받아 회원 가입을 처리합니다.")
+    @Operation(summary = "회원 가입", description = "이메일, 이름, 비밀번호, 지갑 주소를 입력받아 회원 가입을 처리합니다.")
     public ResponseEntity<ApiResponse<UserResponse>> signUp(@RequestBody @Valid SignUpRequest request) {
-        User user = userService.signUp(request.email(), request.name(), request.walletAddress());
+        User user = userService.signUp(request.email(), request.name(), request.password(), request.walletAddress());
         return ResponseEntity.ok(ApiResponse.success(UserResponse.from(user)));
     }
 
@@ -53,9 +57,12 @@ public class UserController {
         return ResponseEntity.ok(ApiResponse.success(UserResponse.from(user)));
     }
 
-    @PutMapping("/{id}/kyc")
-    @Operation(summary = "KYC 신원인증 상태 변경", description = "사용자의 KYC 신원인증 상태를 변경합니다.")
-    public ResponseEntity<ApiResponse<UserResponse>> updateKyc(
+    // 실명확인 승인은 KycController를 통해서만 이뤄집니다. 이 엔드포인트는 운영자가
+    // 사후 제재 확인 등으로 자격을 조정할 때 쓰는 예외 경로이며, 심사 이력이 남지 않습니다.
+    @PutMapping("/admin/{id}/kyc")
+    @Operation(summary = "[관리자] 특정 사용자 KYC 상태 강제 변경",
+               description = "운영자가 지정한 사용자의 KYC 자격을 직접 조정합니다. 정상 승인 경로는 /api/kyc/verifications 입니다.")
+    public ResponseEntity<ApiResponse<UserResponse>> updateKycAsAdmin(
             @PathVariable("id") Long id,
             @RequestParam("kycStatus") boolean kycStatus
     ) {

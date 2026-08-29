@@ -144,10 +144,10 @@ export function WalletHistory() {
   const [transferLoading, setTransferLoading] = useState(false)
   const [currentUserAddress, setCurrentUserAddress] = useState('0x70997970C51812dc3A010C7d01b50e0d17dc79C8') // default
 
-  const loadWalletData = useCallback(async (savedId: number) => {
+  const loadWalletData = useCallback(async () => {
     setLoading(true)
     try {
-      const res = await fetchApi<any>(`/api/users/${savedId}/mypage`)
+      const res = await fetchApi<any>(`/api/users/me/mypage`)
       if (res && res.user && res.user.walletAddress) {
         setCurrentUserAddress(res.user.walletAddress)
       }
@@ -205,45 +205,14 @@ export function WalletHistory() {
       }
     } catch (e: any) {
       console.error("Failed to fetch wallet page data:", e)
-      if (e.message && (
-        e.message.includes("not found") || 
-        e.message.includes("NOT_FOUND") || 
-        e.message.includes("User not found")
-      )) {
-        try {
-          const signupRes = await fetchApi<any>("/api/users/signup", {
-            method: "POST",
-            body: JSON.stringify({
-              email: "test-investor@tokit.com",
-              name: "김토킷",
-              walletAddress: "0x70997970C51812dc3A010C7d01b50e0d17dc79C8"
-            })
-          })
-          const newId = signupRes.id
-          if (typeof window !== "undefined") {
-            localStorage.setItem("tokit_userId", newId.toString())
-          }
-          // Recursive retry
-          loadWalletData(newId)
-        } catch (signupErr: any) {
-          console.error("Auto signup inside wallet page failed", signupErr)
-          toast.error("지갑용 계정 자동 생성 실패: " + signupErr.message)
-        }
-      } else {
         toast.error("지갑 데이터 로드 실패: " + e.message)
-      }
     } finally {
       setLoading(false)
     }
   }, [])
 
   useEffect(() => {
-    let savedId = 1
-    if (typeof window !== "undefined") {
-      const raw = localStorage.getItem("tokit_userId")
-      if (raw) savedId = parseInt(raw, 10)
-    }
-    loadWalletData(savedId)
+    loadWalletData()
   }, [loadWalletData])
 
   const handleRelayTransfer = async (e: React.FormEvent) => {
@@ -308,12 +277,7 @@ export function WalletHistory() {
       setToAddress('')
       setTransferAmount('')
       
-      let savedId = 1
-      if (typeof window !== "undefined") {
-        const raw = localStorage.getItem("tokit_userId")
-        if (raw) savedId = parseInt(raw, 10)
-      }
-      loadWalletData(savedId)
+      loadWalletData()
     } catch (err: any) {
       alert(err.message || "이체 요청 중 오류가 발생했습니다.")
     } finally {

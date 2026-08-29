@@ -28,15 +28,6 @@ export function OrderForm({
   const [price, setPrice] = useState(selectedPrice?.toString() || currentPrice.toString())
   const [quantity, setQuantity] = useState("")
   const [isSubmitting, setIsSubmitting] = useState(false)
-  const [userId, setUserId] = useState<number>(1)
-
-  useEffect(() => {
-    if (typeof window !== "undefined") {
-      const raw = localStorage.getItem("tokit_userId")
-      if (raw) setUserId(parseInt(raw, 10))
-    }
-  }, [])
-
   useEffect(() => {
     if (selectedPrice) {
       setPrice(selectedPrice.toString())
@@ -89,7 +80,6 @@ export function OrderForm({
           "X-Idempotency-Key": key
         },
         body: JSON.stringify({
-          userId: userId,
           assetSymbol: symbol,
           orderType: side === "buy" ? "BUY" : "SELL",
           price: orderType === "market" ? currentPrice : priceNum,
@@ -105,7 +95,7 @@ export function OrderForm({
     } finally {
       setIsSubmitting(false)
     }
-  }, [quantityNum, priceNum, orderType, side, symbol, currentPrice, userId, onOrderSubmit])
+  }, [quantityNum, priceNum, orderType, side, symbol, currentPrice, onOrderSubmit])
 
   const isValidOrder = quantityNum > 0 && (orderType === "market" || priceNum > 0)
   const hasEnoughBalance = side === "buy" ? totalAmount <= availableBalance : quantityNum <= availableTokens

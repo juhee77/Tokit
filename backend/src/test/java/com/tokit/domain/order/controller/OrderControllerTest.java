@@ -1,5 +1,6 @@
 package com.tokit.domain.order.controller;
 
+import com.tokit.support.TestAuthPrincipalResolver;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.tokit.domain.asset.entity.Asset;
 import com.tokit.domain.order.entity.Order;
@@ -51,6 +52,7 @@ class OrderControllerTest {
     @BeforeEach
     void setUp() {
         mockMvc = MockMvcBuilders.standaloneSetup(orderController)
+                .setCustomArgumentResolvers(new TestAuthPrincipalResolver(1L, "order.user@tokit.com"))
                 .setControllerAdvice(new GlobalExceptionHandler())
                 .build();
 
@@ -87,7 +89,7 @@ class OrderControllerTest {
     void placeOrder_Success() throws Exception {
         // Given
         OrderController.PlaceOrderRequest request = new OrderController.PlaceOrderRequest(
-                1L, "MAPO-STO", OrderType.BUY, new BigDecimal("10000"), new BigDecimal("5")
+                "MAPO-STO", OrderType.BUY, new BigDecimal("10000"), new BigDecimal("5")
         );
 
         when(orderService.placeOrder(any(), any(), any(), any(), any()))
@@ -109,7 +111,7 @@ class OrderControllerTest {
     void placeOrder_ValidationError_Returns400() throws Exception {
         // Given: 음수 가격(-10,000원)
         OrderController.PlaceOrderRequest request = new OrderController.PlaceOrderRequest(
-                1L, "MAPO-STO", OrderType.BUY, new BigDecimal("-10000"), new BigDecimal("5")
+                "MAPO-STO", OrderType.BUY, new BigDecimal("-10000"), new BigDecimal("5")
         );
 
         // When & Then
@@ -129,20 +131,19 @@ class OrderControllerTest {
 
         // When & Then
         mockMvc.perform(post("/api/orders/100/cancel")
-                        .header("X-Idempotency-Key", "uuid-v4-idempotency-key-03")
-                        .param("userId", "1"))
+                        .header("X-Idempotency-Key", "uuid-v4-idempotency-key-03"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.status").value(200));
     }
 
     @Test
-    @DisplayName("GET /api/orders/user/{userId}: 특정 사용자의 전체 주문 내역 조회가 성공 및 HTTP 200을 반환한다.")
-    void getOrdersByUser_Success() throws Exception {
+    @DisplayName("GET /api/orders/me: 로그인한 사용자의 전체 주문 내역 조회가 성공 및 HTTP 200을 반환한다.")
+    void getMyOrders_Success() throws Exception {
         // Given
         when(orderService.getOrdersByUser(1L)).thenReturn(List.of(testOrder));
 
         // When & Then
-        mockMvc.perform(get("/api/orders/user/1"))
+        mockMvc.perform(get("/api/orders/me"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.status").value(200))
                 .andExpect(jsonPath("$.data[0].id").value(100))

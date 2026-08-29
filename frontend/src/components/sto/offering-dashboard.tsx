@@ -71,14 +71,14 @@ export function OfferingDashboard({ symbol, onBack }: OfferingDashboardProps) {
     })
   }
 
-  const loadData = useCallback(async (currentUserId: number) => {
+  const loadData = useCallback(async () => {
     try {
       // 1. Fetch asset details
       const assetData = await fetchApi<AssetResponse>(`/api/assets/${symbol}`)
       setAsset(assetData)
 
       // 2. Fetch user & wallet details
-      const mypageData = await fetchApi<MyPageResponse>(`/api/users/${currentUserId}/mypage`)
+      const mypageData = await fetchApi<MyPageResponse>(`/api/users/me/mypage`)
       setUser(mypageData.user)
       
       const krwWallet = mypageData.wallets.find(w => w.assetSymbol === null || w.assetSymbol === "KRW" || !w.assetSymbol)
@@ -92,13 +92,7 @@ export function OfferingDashboard({ symbol, onBack }: OfferingDashboardProps) {
   }, [symbol])
 
   useEffect(() => {
-    let savedId = 1
-    if (typeof window !== "undefined") {
-      const raw = localStorage.getItem("tokit_userId")
-      if (raw) savedId = parseInt(raw, 10)
-    }
-    setUserId(savedId)
-    loadData(savedId)
+    loadData()
   }, [loadData])
 
   const handleSubscribe = useCallback(async () => {
@@ -133,13 +127,12 @@ export function OfferingDashboard({ symbol, onBack }: OfferingDashboardProps) {
           "X-Idempotency-Key": key
         },
         body: JSON.stringify({
-          userId: userId,
           amount: amount
         })
       })
       toast.success(`${amount.toLocaleString()}원 청약 신청이 성공적으로 완료되었습니다.`)
       setInvestmentAmount("")
-      loadData(userId)
+      loadData()
     } catch (err: any) {
       console.error(err)
       toast.error("청약 실패: " + err.message)

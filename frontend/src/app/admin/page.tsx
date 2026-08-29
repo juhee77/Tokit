@@ -237,7 +237,7 @@ export default function AdminPage() {
     const nextKyc = !currentKyc
     try {
       toast.info(`KYC 상태를 ${nextKyc ? "인증 완료" : "미인증"} 상태로 변경 중...`)
-      await fetchApi(`/api/users/${userId}/kyc?kycStatus=${nextKyc}`, {
+      await fetchApi(`/api/users/admin/${userId}/kyc?kycStatus=${nextKyc}`, {
         method: "PUT"
       })
       toast.success("KYC 및 온체인 화이트리스트 상태가 변경되었습니다.")

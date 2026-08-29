@@ -96,9 +96,15 @@ const formatKoreanTextAmount = (amountStr: string | number): string => {
 export function MyPageDashboard() {
   const [data, setData] = useState<MyPageResponse | null>(null)
   const [loading, setLoading] = useState<boolean>(true)
-  const [userId, setUserId] = useState<number>(1)
   const [copied, setCopied] = useState<boolean>(false)
   const [kycLoading, setKycLoading] = useState<boolean>(false)
+  const [kycModalOpen, setKycModalOpen] = useState<boolean>(false)
+  const [kycForm, setKycForm] = useState({
+    legalName: "",
+    dateOfBirth: "",
+    nationalIdLast7: "",
+    phoneNumber: "",
+  })
 
   // Transaction state
   const [depositAmount, setDepositAmount] = useState<string>("")
@@ -120,62 +126,23 @@ export function MyPageDashboard() {
     })
   }
 
-  const loadMyPageData = useCallback(async (id: number) => {
+  const loadMyPageData = useCallback(async () => {
     setLoading(true)
     try {
-      const res = await fetchApi<MyPageResponse>(`/api/users/${id}/mypage`)
+      const res = await fetchApi<MyPageResponse>(`/api/users/me/mypage`)
       setData(res)
     } catch (err: any) {
       console.error(err)
       
       // Auto-signup default testing user if not found
-      if (err.message && (
-        err.message.includes("not found") || 
-        err.message.includes("NOT_FOUND") || 
-        err.message.includes("M001") ||
-        err.message.includes("User not found")
-      )) {
-        try {
-          toast.info("마이페이지 테스트용 계정을 생성하고 있습니다...")
-          const signupRes = await fetchApi<any>("/api/users/signup", {
-            method: "POST",
-            body: JSON.stringify({
-              email: "test-investor@tokit.com",
-              name: "김토킷",
-              walletAddress: "0x70997970C51812dc3A010C7d01b50e0d17dc79C8"
-            })
-          })
-          
-          const newId = signupRes.id
-          setUserId(newId)
-          if (typeof window !== "undefined") {
-            localStorage.setItem("tokit_userId", newId.toString())
-          }
-          
-          // Retry fetching
-          const retryRes = await fetchApi<MyPageResponse>(`/api/users/${newId}/mypage`)
-          setData(retryRes)
-          toast.success("테스트용 계정(김토킷)이 생성되었습니다.")
-        } catch (signupErr: any) {
-          console.error("Auto signup failed", signupErr)
-          toast.error("계정 자동 생성 실패: " + signupErr.message)
-        }
-      } else {
         toast.error("데이터 조회 실패: " + err.message)
-      }
     } finally {
       setLoading(false)
     }
   }, [])
 
   useEffect(() => {
-    let savedId = 1
-    if (typeof window !== "undefined") {
-      const raw = localStorage.getItem("tokit_userId")
-      if (raw) savedId = parseInt(raw, 10)
-    }
-    setUserId(savedId)
-    loadMyPageData(savedId)
+    loadMyPageData()
   }, [loadMyPageData])
 
   const handleCopyWalletAddress = () => {
@@ -186,19 +153,31 @@ export function MyPageDashboard() {
     setTimeout(() => setCopied(false), 2000)
   }
 
-  const handleKycToggle = async () => {
-    if (!data) return
-    const nextKyc = !data.user.kycStatus
+  const handleKycSubmit = async (e: React.FormEvent) => {
+    e.preventDefault()
     setKycLoading(true)
     try {
-      await fetchApi(`/api/users/${userId}/kyc?kycStatus=${nextKyc}`, {
-        method: "PUT"
-      })
-      toast.success(`KYC 인증 상태가 ${nextKyc ? "인증 완료" : "미인증"} 상태로 변경되었습니다.`)
-      loadMyPageData(userId)
+      const result = await fetchApi<{ status: string; rejectReason: string | null }>(
+        "/api/kyc/verifications",
+        {
+          method: "POST",
+          body: JSON.stringify(kycForm),
+        }
+      )
+
+      if (result.status === "APPROVED") {
+        toast.success("실명확인이 승인되었습니다. 청약 및 거래가 가능합니다.")
+        setKycModalOpen(false)
+        loadMyPageData()
+      } else if (result.status === "PENDING") {
+        toast.info("실명확인이 심사 중입니다. 승인 후 거래가 가능합니다.")
+        setKycModalOpen(false)
+      } else {
+        toast.error(result.rejectReason || "실명확인이 거절되었습니다.")
+      }
     } catch (err: any) {
       console.error(err)
-      toast.error("KYC 변경 실패: " + err.message)
+      toast.error("실명확인 신청 실패: " + err.message)
     } finally {
       setKycLoading(false)
     }
@@ -221,13 +200,12 @@ export function MyPageDashboard() {
           "X-Idempotency-Key": key
         },
         body: JSON.stringify({
-          userId: userId,
           amount: amountNum
         })
       })
       toast.success(`${amountNum.toLocaleString()}원 충전이 완료되었습니다. (멱등성 키: ${key.slice(0, 8)}...)`)
       setDepositAmount("")
-      loadMyPageData(userId)
+      loadMyPageData()
     } catch (err: any) {
       console.error(err)
       toast.error("충전 실패: " + err.message)
@@ -259,13 +237,12 @@ export function MyPageDashboard() {
           "X-Idempotency-Key": key
         },
         body: JSON.stringify({
-          userId: userId,
           amount: amountNum
         })
       })
       toast.success(`${amountNum.toLocaleString()}원 출금 신청이 완료되었습니다. (멱등성 키: ${key.slice(0, 8)}...)`)
       setWithdrawAmount("")
-      loadMyPageData(userId)
+      loadMyPageData()
     } catch (err: any) {
       console.error(err)
       toast.error("출금 실패: " + err.message)
@@ -308,7 +285,7 @@ export function MyPageDashboard() {
       <div className="flex-1 flex flex-col items-center justify-center py-20 text-slate-400 gap-3">
         <p className="text-sm font-semibold text-destructive">마이페이지 데이터를 불러오지 못했습니다.</p>
         <button 
-          onClick={() => loadMyPageData(userId)}
+          onClick={() => loadMyPageData()}
           className="mt-2 px-4 py-2 text-xs font-semibold bg-surface border border-outline-variant rounded hover:border-secondary transition-colors"
         >
           다시 시도
@@ -326,7 +303,7 @@ export function MyPageDashboard() {
           <p className="text-xs text-muted-foreground mt-1">계정 정보 관리 및 예치금 충전/출금을 관리합니다.</p>
         </div>
         <button 
-          onClick={() => loadMyPageData(userId)}
+          onClick={() => loadMyPageData()}
           className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold border border-outline-variant rounded bg-surface hover:border-secondary hover:text-secondary transition-colors"
           disabled={loading}
         >
@@ -391,19 +368,16 @@ export function MyPageDashboard() {
               )}
             </div>
 
-            <button 
-              onClick={handleKycToggle}
-              className={cn(
-                "px-3 py-1.5 text-xs font-bold rounded border transition-colors flex items-center gap-1",
-                data?.user.kycStatus
-                  ? "border-warning/50 text-warning bg-warning/5 hover:bg-warning/10"
-                  : "border-green-600/50 text-green-600 bg-green-50 hover:bg-green-100"
-              )}
-              disabled={kycLoading}
-            >
-              {kycLoading && <Loader2 className="w-3 h-3 animate-spin" />}
-              {data?.user.kycStatus ? "인증 해제 시뮬레이션" : "KYC 간편 인증하기"}
-            </button>
+            {!data?.user.kycStatus && (
+              <button
+                onClick={() => setKycModalOpen(true)}
+                className="px-3 py-1.5 text-xs font-bold rounded border transition-colors flex items-center gap-1 border-green-600/50 text-green-600 bg-green-50 hover:bg-green-100"
+                disabled={kycLoading}
+              >
+                {kycLoading && <Loader2 className="w-3 h-3 animate-spin" />}
+                실명확인 신청하기
+              </button>
+            )}
           </div>
         </div>
 
@@ -681,6 +655,95 @@ export function MyPageDashboard() {
           </div>
         )}
       </div>
+      {/* 실명확인 신청 모달 */}
+      {kycModalOpen && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="kyc-modal-title"
+        >
+          <div className="w-full max-w-md rounded border border-outline-variant bg-card p-6 shadow-lg">
+            <h3 id="kyc-modal-title" className="text-base font-bold text-foreground">실명확인 신청</h3>
+            <p className="mt-1 text-xs text-muted-foreground">
+              입력하신 정보는 실명확인 기관에 전달되어 신원 확인에만 사용됩니다.
+            </p>
+
+            <form onSubmit={handleKycSubmit} className="mt-5 flex flex-col gap-4">
+              <div className="flex flex-col gap-1.5">
+                <label htmlFor="kyc-legal-name" className="text-xs font-semibold text-foreground">실명</label>
+                <input
+                  id="kyc-legal-name"
+                  required
+                  value={kycForm.legalName}
+                  onChange={(e) => setKycForm({ ...kycForm, legalName: e.target.value })}
+                  className="h-9 rounded border border-outline-variant bg-background px-3 text-sm outline-none focus:border-secondary"
+                  placeholder="홍길동"
+                />
+              </div>
+
+              <div className="flex flex-col gap-1.5">
+                <label htmlFor="kyc-dob" className="text-xs font-semibold text-foreground">생년월일</label>
+                <input
+                  id="kyc-dob"
+                  type="date"
+                  required
+                  value={kycForm.dateOfBirth}
+                  onChange={(e) => setKycForm({ ...kycForm, dateOfBirth: e.target.value })}
+                  className="h-9 rounded border border-outline-variant bg-background px-3 text-sm outline-none focus:border-secondary"
+                />
+              </div>
+
+              <div className="flex flex-col gap-1.5">
+                <label htmlFor="kyc-rrn" className="text-xs font-semibold text-foreground">주민등록번호 뒤 7자리</label>
+                <input
+                  id="kyc-rrn"
+                  required
+                  inputMode="numeric"
+                  maxLength={7}
+                  value={kycForm.nationalIdLast7}
+                  onChange={(e) => setKycForm({ ...kycForm, nationalIdLast7: e.target.value })}
+                  className="h-9 rounded border border-outline-variant bg-background px-3 font-mono text-sm outline-none focus:border-secondary"
+                  placeholder="1234567"
+                />
+              </div>
+
+              <div className="flex flex-col gap-1.5">
+                <label htmlFor="kyc-phone" className="text-xs font-semibold text-foreground">휴대전화 번호</label>
+                <input
+                  id="kyc-phone"
+                  required
+                  inputMode="tel"
+                  value={kycForm.phoneNumber}
+                  onChange={(e) => setKycForm({ ...kycForm, phoneNumber: e.target.value })}
+                  className="h-9 rounded border border-outline-variant bg-background px-3 text-sm outline-none focus:border-secondary"
+                  placeholder="010-0000-0000"
+                />
+              </div>
+
+              <div className="mt-2 flex justify-end gap-2">
+                <button
+                  type="button"
+                  onClick={() => setKycModalOpen(false)}
+                  className="rounded border border-outline-variant px-3 py-1.5 text-xs font-semibold text-muted-foreground hover:bg-surface-container-low"
+                >
+                  취소
+                </button>
+                <button
+                  type="submit"
+                  disabled={kycLoading}
+                  className="flex items-center gap-1 rounded border border-green-600/50 bg-green-50 px-3 py-1.5 text-xs font-bold text-green-600 hover:bg-green-100 disabled:opacity-60"
+                >
+                  {kycLoading && <Loader2 className="w-3 h-3 animate-spin" />}
+                  신청하기
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
+
+
   )
 }

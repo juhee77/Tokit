@@ -1,9 +1,7 @@
 import type { Metadata } from 'next'
 import { Inter, JetBrains_Mono } from 'next/font/google'
 import { Analytics } from '@vercel/analytics/next'
-import { Sidebar } from '@/components/sto/sidebar'
-import { TopNav } from '@/components/sto/top-nav'
-import { ConnectionBanner } from '@/components/sto/connection-banner'
+import { AuthGate } from '@/components/auth/auth-gate'
 import './globals.css'
 
 const inter = Inter({ subsets: ["latin"], variable: '--font-inter' });
@@ -40,16 +38,7 @@ export default function RootLayout({
   return (
     <html lang="ko" className={`${inter.variable} ${jetbrainsMono.variable} bg-background light`} style={{ colorScheme: 'light' }}>
       <body className="font-sans antialiased min-h-screen bg-background text-foreground overflow-hidden">
-        <ConnectionBanner />
-        <div className="flex h-screen">
-          <Sidebar />
-          <div className="flex-1 flex flex-col md:ml-64 min-w-0">
-            <TopNav />
-            <main className="flex-1 overflow-y-auto bg-background pt-20 md:pt-24 pb-4 px-4 md:pb-6 md:px-6">
-              {children}
-            </main>
-          </div>
-        </div>
+        <AuthGate>{children}</AuthGate>
         {process.env.NODE_ENV === 'production' && <Analytics />}
       </body>
     </html>

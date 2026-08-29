@@ -4,6 +4,7 @@ import com.tokit.domain.asset.entity.Asset;
 import com.tokit.domain.asset.service.AssetService;
 import com.tokit.global.annotation.Idempotent;
 import com.tokit.global.dto.ApiResponse;
+import com.tokit.global.security.AuthUser;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
@@ -12,6 +13,7 @@ import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Positive;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
 
 import java.math.BigDecimal;
@@ -62,7 +64,6 @@ public class AssetController {
     }
 
     public record SubscribeAssetRequest(
-            @NotNull(message = "사용자 ID는 필수입니다.") Long userId,
             @NotNull(message = "투자 금액은 필수입니다.") @Positive(message = "투자 금액은 양수여야 합니다.") BigDecimal amount
     ) {}
 
@@ -123,9 +124,10 @@ public class AssetController {
     public ResponseEntity<ApiResponse<Void>> subscribeAsset(
             @RequestHeader("X-Idempotency-Key") String idempotencyKey,
             @PathVariable("symbol") String symbol,
+            @AuthenticationPrincipal AuthUser authUser,
             @RequestBody @Valid SubscribeAssetRequest request
     ) {
-        assetService.subscribeAsset(symbol, request.userId(), request.amount());
+        assetService.subscribeAsset(symbol, authUser.id(), request.amount());
         return ResponseEntity.ok(ApiResponse.success(null));
     }
 }

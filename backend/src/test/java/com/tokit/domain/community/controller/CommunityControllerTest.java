@@ -1,5 +1,6 @@
 package com.tokit.domain.community.controller;
 
+import com.tokit.support.TestAuthPrincipalResolver;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.tokit.domain.asset.entity.Asset;
 import com.tokit.domain.community.entity.Comment;
@@ -58,7 +59,8 @@ class CommunityControllerTest {
     @BeforeEach
     void setUp() throws Exception {
         mockMvc = MockMvcBuilders.standaloneSetup(communityController)
-                .setCustomArgumentResolvers(new PageableHandlerMethodArgumentResolver())
+                .setCustomArgumentResolvers(new PageableHandlerMethodArgumentResolver(),
+                        new TestAuthPrincipalResolver(1L, "community.user@tokit.com"))
                 .setControllerAdvice(new GlobalExceptionHandler())
                 .build();
 
@@ -99,7 +101,7 @@ class CommunityControllerTest {
     void createPost_Success() throws Exception {
         // Given
         CommunityController.CreatePostRequest request = new CommunityController.CreatePostRequest(
-                "여의도 STO 분기 배당 분석", "이번 분기 배당 수익률이 상승했습니다.", 1L, 10L
+                "여의도 STO 분기 배당 분석", "이번 분기 배당 수익률이 상승했습니다.", 10L
         );
 
         when(communityService.createPost(any(), any(), any(), any())).thenReturn(testPost);
@@ -148,8 +150,7 @@ class CommunityControllerTest {
         doNothing().when(communityService).deletePost(100L, 1L);
 
         // When & Then
-        mockMvc.perform(delete("/api/posts/100")
-                        .param("userId", "1"))
+        mockMvc.perform(delete("/api/posts/100"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.status").value(200));
     }
@@ -159,7 +160,7 @@ class CommunityControllerTest {
     void createComment_Success() throws Exception {
         // Given
         CommunityController.CreateCommentRequest request = new CommunityController.CreateCommentRequest(
-                "유익한 정보 감사드립니다.", 1L
+                "유익한 정보 감사드립니다."
         );
 
         when(communityService.createComment(any(), any(), any())).thenReturn(testComment);

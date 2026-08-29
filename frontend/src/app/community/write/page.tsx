@@ -38,14 +38,6 @@ export default function WritePostPage() {
       }
     }
 
-    // Load user session
-    let savedId = 1
-    if (typeof window !== "undefined") {
-      const raw = localStorage.getItem("tokit_userId")
-      if (raw) savedId = parseInt(raw, 10)
-    }
-    setUserId(savedId)
-
     loadAssets()
   }, [])
 
@@ -66,7 +58,6 @@ export default function WritePostPage() {
         body: JSON.stringify({
           title: title.trim(),
           content: content.trim(),
-          userId: targetUserId,
           assetId: assetIdVal,
         }),
       })
@@ -77,37 +68,7 @@ export default function WritePostPage() {
       toast.success("게시글이 성공적으로 등록되었습니다.")
       router.push('/community')
     } catch (err: any) {
-      if (err.message && (
-        err.message.includes("not found") || 
-        err.message.includes("NOT_FOUND") || 
-        err.message.includes("User not found")
-      )) {
-        try {
-          // Auto signup
-          const signupRes = await fetchApi<any>("/api/users/signup", {
-            method: "POST",
-            body: JSON.stringify({
-              email: "test-investor@tokit.com",
-              name: "김토킷",
-              walletAddress: "0x70997970C51812dc3A010C7d01b50e0d17dc79C8"
-            })
-          })
-          const newId = signupRes.id
-          setUserId(newId)
-          if (typeof window !== "undefined") {
-            localStorage.setItem("tokit_userId", newId.toString())
-          }
-          // Retry
-          await makePostRequest(newId)
-          toast.success("김토킷 계정이 생성되고 게시글이 성공적으로 등록되었습니다!")
-          router.push('/community')
-        } catch (signupErr: any) {
-          console.error("Auto signup inside write page failed", signupErr)
-          toast.error("계정 생성 실패: " + signupErr.message)
-        }
-      } else {
         toast.error("게시글 등록 실패: " + err.message)
-      }
     } finally {
       setLoading(false)
     }

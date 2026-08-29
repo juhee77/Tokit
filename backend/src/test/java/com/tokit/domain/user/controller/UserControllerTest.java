@@ -1,5 +1,6 @@
 package com.tokit.domain.user.controller;
 
+import com.tokit.support.TestAuthPrincipalResolver;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.tokit.domain.user.entity.User;
 import com.tokit.domain.user.service.UserService;
@@ -47,6 +48,7 @@ class UserControllerTest {
     @BeforeEach
     void setUp() throws Exception {
         mockMvc = MockMvcBuilders.standaloneSetup(userController)
+                .setCustomArgumentResolvers(new TestAuthPrincipalResolver(1L, "order.user@tokit.com"))
                 .setControllerAdvice(new GlobalExceptionHandler())
                 .build();
 
@@ -64,10 +66,10 @@ class UserControllerTest {
     void signUp_Success() throws Exception {
         // Given
         UserController.SignUpRequest request = new UserController.SignUpRequest(
-                "controller.user@tokit.com", "Controller Investor", "0xCONTROLLER_USER_ADDRESS_01"
+                "controller.user@tokit.com", "Controller Investor", "tokit1234", "0xCONTROLLER_USER_ADDRESS_01"
         );
 
-        when(userService.signUp(any(), any(), any())).thenReturn(testUser);
+        when(userService.signUp(any(), any(), any(), any())).thenReturn(testUser);
 
         // When & Then
         mockMvc.perform(post("/api/users/signup")
@@ -84,7 +86,7 @@ class UserControllerTest {
     void signUp_ValidationError_Returns400() throws Exception {
         // Given: 비올바른 이메일 형식
         UserController.SignUpRequest request = new UserController.SignUpRequest(
-                "invalid-email-format", "Controller Investor", "0xCONTROLLER_USER_ADDRESS_01"
+                "invalid-email-format", "Controller Investor", "tokit1234", "0xCONTROLLER_USER_ADDRESS_01"
         );
 
         // When & Then
@@ -110,13 +112,13 @@ class UserControllerTest {
     }
 
     @Test
-    @DisplayName("PUT /api/users/{id}/kyc: KYC 신원인증 상태 변경 성공 시 HTTP 200을 반환한다.")
-    void updateKyc_Success() throws Exception {
-        // Given
+    @DisplayName("PUT /api/users/admin/{id}/kyc: 운영자가 특정 사용자의 KYC 자격을 강제 조정하면 HTTP 200을 반환한다.")
+    void updateKycAsAdmin_Success() throws Exception {
+        // Given: 정상 승인 경로는 /api/kyc/verifications이며, 이 엔드포인트는 운영자 예외 조치용입니다.
         when(userService.updateKycStatus(eq(1L), eq(true))).thenReturn(testUser);
 
         // When & Then
-        mockMvc.perform(put("/api/users/1/kyc")
+        mockMvc.perform(put("/api/users/admin/1/kyc")
                         .param("kycStatus", "true"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.status").value(200))

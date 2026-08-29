@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react'
 import Link from 'next/link'
 import { fetchApi } from '@/lib/api'
+import { useAuthStore } from '@/stores/useAuthStore'
 import { MessageSquare, Calendar, User, Search, Plus, Trash2, X, ChevronRight } from 'lucide-react'
 
 // --- Interfaces matching backend records ---
@@ -52,13 +53,10 @@ export default function CommunityPage() {
   const [searchTerm, setSearchTerm] = useState('')
   const [activeTab, setActiveTab] = useState<'all' | 'free' | 'sto'>('all')
 
-  const [currentUserId, setCurrentUserId] = useState<number>(1)
+  const authUser = useAuthStore((s) => s.user)
+  const currentUserId = authUser?.userId ?? 0
 
   useEffect(() => {
-    if (typeof window !== "undefined") {
-      const raw = localStorage.getItem("tokit_userId")
-      if (raw) setCurrentUserId(parseInt(raw, 10))
-    }
     loadAssets()
     loadPosts()
   }, [])

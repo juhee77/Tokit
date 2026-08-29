@@ -1,5 +1,6 @@
 package com.tokit.domain.user.controller;
 
+import com.tokit.global.security.AuthUser;
 import com.tokit.domain.user.dto.MyPageResponse;
 import com.tokit.domain.user.service.MyPageService;
 import com.tokit.global.dto.ApiResponse;
@@ -44,7 +45,7 @@ class MyPageControllerTest {
         given(myPageService.getMyPageData(userId)).willReturn(myPageResponse);
 
         // When
-        ResponseEntity<ApiResponse<MyPageResponse>> response = myPageController.getMyPage(userId);
+        ResponseEntity<ApiResponse<MyPageResponse>> response = myPageController.getMyPage(new AuthUser(userId, "juhee@tokit.com", com.tokit.domain.user.entity.Role.USER));
 
         // Then
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);

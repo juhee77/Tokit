@@ -3,18 +3,13 @@
 import { useState, useEffect } from 'react'
 import { ShieldCheck, Eye, EyeOff, Key, Monitor, BellRing, Settings as SettingsIcon } from 'lucide-react'
 import { toast } from 'sonner'
+import { useAuthStore } from '@/stores/useAuthStore'
 
 export default function SettingsPage() {
   const [showApiKey, setShowApiKey] = useState(false)
-  const [currentUserId, setCurrentUserId] = useState('1')
+  const authUser = useAuthStore((s) => s.user)
+  const currentUserId = authUser ? String(authUser.userId) : '-'
   const [apiKey] = useState('tk_live_51Nzh1D2e82f10b7f8e8112c3...')
-
-  useEffect(() => {
-    if (typeof window !== 'undefined') {
-      const raw = localStorage.getItem('tokit_userId')
-      if (raw) setCurrentUserId(raw)
-    }
-  }, [])
 
   const handleRegenKey = () => {
     toast.success("새로운 API 키가 성공적으로 발급되었습니다.")

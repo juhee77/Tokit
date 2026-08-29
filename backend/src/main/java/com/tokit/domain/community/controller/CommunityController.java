@@ -5,6 +5,7 @@ import com.tokit.domain.community.entity.Post;
 import com.tokit.domain.community.service.CommunityService;
 import com.tokit.global.annotation.Idempotent;
 import com.tokit.global.dto.ApiResponse;
+import com.tokit.global.security.AuthUser;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
@@ -16,6 +17,7 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
 import org.springframework.data.web.PageableDefault;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -39,18 +41,12 @@ public class CommunityController {
         @NotBlank(message = "Content is required")
         String content,
 
-        @NotNull(message = "User ID is required")
-        Long userId,
-
         Long assetId
     ) {}
 
     public record CreateCommentRequest(
         @NotBlank(message = "Content is required")
-        String content,
-
-        @NotNull(message = "User ID is required")
-        Long userId
+        String content
     ) {}
 
     public record CommentResponse(
@@ -104,9 +100,10 @@ public class CommunityController {
     @Operation(summary = "신규 게시글 작성", description = "자유게시글 또는 특정 STO 자산 관련 토론글을 작성합니다. (X-Idempotency-Key 필수)")
     public ResponseEntity<ApiResponse<PostResponse>> createPost(
             @RequestHeader("X-Idempotency-Key") String idempotencyKey,
+            @AuthenticationPrincipal AuthUser authUser,
             @RequestBody @Valid CreatePostRequest request
     ) {
-        Post post = communityService.createPost(request.userId(), request.assetId(), request.title(), request.content());
+        Post post = communityService.createPost(authUser.id(), request.assetId(), request.title(), request.content());
         return ResponseEntity.ok(ApiResponse.success(PostResponse.from(post)));
     }
 
@@ -131,9 +128,9 @@ public class CommunityController {
     @Operation(summary = "게시글 삭제", description = "게시글 작성자 본인 확인 후 게시글을 영구 삭제합니다.")
     public ResponseEntity<ApiResponse<Void>> deletePost(
             @PathVariable("id") Long id,
-            @RequestParam("userId") Long userId
+            @AuthenticationPrincipal AuthUser authUser
     ) {
-        communityService.deletePost(id, userId);
+        communityService.deletePost(id, authUser.id());
         return ResponseEntity.ok(ApiResponse.success(null));
     }
 
@@ -143,9 +140,10 @@ public class CommunityController {
     public ResponseEntity<ApiResponse<CommentResponse>> createComment(
             @RequestHeader("X-Idempotency-Key") String idempotencyKey,
             @PathVariable("id") Long id,
+            @AuthenticationPrincipal AuthUser authUser,
             @RequestBody @Valid CreateCommentRequest request
     ) {
-        Comment comment = communityService.createComment(id, request.userId(), request.content());
+        Comment comment = communityService.createComment(id, authUser.id(), request.content());
         return ResponseEntity.ok(ApiResponse.success(CommentResponse.from(comment)));
     }
 
@@ -162,9 +160,9 @@ public class CommunityController {
     @Operation(summary = "댓글 삭제", description = "댓글 작성자 본인 확인 후 댓글을 영구 삭제합니다.")
     public ResponseEntity<ApiResponse<Void>> deleteComment(
             @PathVariable("commentId") Long commentId,
-            @RequestParam("userId") Long userId
+            @AuthenticationPrincipal AuthUser authUser
     ) {
-        communityService.deleteComment(commentId, userId);
+        communityService.deleteComment(commentId, authUser.id());
         return ResponseEntity.ok(ApiResponse.success(null));
     }
 }

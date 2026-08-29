@@ -3,8 +3,9 @@
 import { useState, useEffect } from 'react'
 import { usePathname } from 'next/navigation'
 import Link from 'next/link'
-import { Search, Bell, Settings, ChevronRight, ChevronDown } from 'lucide-react'
+import { Search, Bell, Settings, ChevronRight, ChevronDown, LogOut } from 'lucide-react'
 import { fetchApi } from '@/lib/api'
+import { useAuthStore } from '@/stores/useAuthStore'
 
 interface MyPageUserResponse {
   user: {
@@ -30,14 +31,20 @@ const breadcrumbMap: Record<string, string[]> = {
 
 export function TopNav() {
   const pathname = usePathname()
+  const signOut = useAuthStore((s) => s.signOut)
+
+  const handleSignOut = () => {
+    signOut()
+    window.location.href = '/login'
+  }
+
   const [searchQuery, setSearchQuery] = useState('')
   const [userProfile, setUserProfile] = useState({ name: 'J. Smith', initials: 'JS', role: 'Institutional' })
   
   useEffect(() => {
     const loadUserProfile = async () => {
-      const savedId = localStorage.getItem("tokit_userId") || "1"
       try {
-        const data = await fetchApi<MyPageUserResponse>(`/api/users/${savedId}/mypage`)
+        const data = await fetchApi<MyPageUserResponse>(`/api/users/me/mypage`)
         if (data && data.user) {
           const name = data.user.name
           let initials = 'US'
@@ -114,6 +121,16 @@ export function TopNav() {
           </div>
           <ChevronDown className="w-4 h-4 text-outline ml-2 hidden md:block" />
         </Link>
+
+        <button
+          type="button"
+          onClick={handleSignOut}
+          title="로그아웃"
+          aria-label="로그아웃"
+          className="text-muted-foreground hover:text-secondary transition-colors p-2 ml-1"
+        >
+          <LogOut className="w-5 h-5" />
+        </button>
       </div>
     </header>
   )

@@ -13,8 +13,10 @@ import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Positive;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
 import com.tokit.global.annotation.Idempotent;
+import com.tokit.global.security.AuthUser;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
@@ -29,7 +31,6 @@ public class OrderController {
     private final OrderService orderService;
 
     public record PlaceOrderRequest(
-        @NotNull(message = "User ID is required") Long userId,
         @NotBlank(message = "Asset Symbol is required") String assetSymbol,
         @NotNull(message = "Order Type (BUY/SELL) is required") OrderType orderType,
         @NotNull(message = "Price is required") @Positive(message = "Price must be positive") BigDecimal price,
@@ -67,9 +68,10 @@ public class OrderController {
     @Operation(summary = "매수/매도 주문 접수", description = "주식 토큰의 매수 혹은 매도 주문을 접수합니다. (Idempotency 보장)")
     public ResponseEntity<ApiResponse<OrderResponse>> placeOrder(
             @RequestHeader("X-Idempotency-Key") String idempotencyKey,
+            @AuthenticationPrincipal AuthUser authUser,
             @RequestBody @Valid PlaceOrderRequest request) {
         Order order = orderService.placeOrder(
-            request.userId(),
+            authUser.id(),
             request.assetSymbol(),
             request.orderType(),
             request.price(),
@@ -84,15 +86,15 @@ public class OrderController {
     public ResponseEntity<ApiResponse<Void>> cancelOrder(
             @RequestHeader("X-Idempotency-Key") String idempotencyKey,
             @PathVariable("id") Long id,
-            @RequestParam("userId") Long userId) {
-        orderService.cancelOrder(id, userId);
+            @AuthenticationPrincipal AuthUser authUser) {
+        orderService.cancelOrder(id, authUser.id());
         return ResponseEntity.ok(ApiResponse.success());
     }
 
-    @GetMapping("/user/{userId}")
-    @Operation(summary = "사용자 주문 내역 조회", description = "특정 사용자의 전체 주문 내역 리스트를 조회합니다.")
-    public ResponseEntity<ApiResponse<List<OrderResponse>>> getOrdersByUser(@PathVariable("userId") Long userId) {
-        List<OrderResponse> list = orderService.getOrdersByUser(userId).stream()
+    @GetMapping("/me")
+    @Operation(summary = "내 주문 내역 조회", description = "로그인한 사용자의 전체 주문 내역 리스트를 조회합니다.")
+    public ResponseEntity<ApiResponse<List<OrderResponse>>> getMyOrders(@AuthenticationPrincipal AuthUser authUser) {
+        List<OrderResponse> list = orderService.getOrdersByUser(authUser.id()).stream()
                 .map(OrderResponse::from)
                 .toList();
         return ResponseEntity.ok(ApiResponse.success(list));

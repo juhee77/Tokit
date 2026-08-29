@@ -117,13 +117,8 @@ export function PortfolioDashboard() {
 
   const loadRealData = async () => {
     setLoading(true)
-    let savedId = 1
-    if (typeof window !== "undefined") {
-      const raw = localStorage.getItem("tokit_userId")
-      if (raw) savedId = parseInt(raw, 10)
-    }
     try {
-      const res = await fetchApi<any>(`/api/users/${savedId}/mypage`)
+      const res = await fetchApi<any>(`/api/users/me/mypage`)
       setRealUser(res.user)
       setRealWallets(res.wallets || [])
     } catch (e) {

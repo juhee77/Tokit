@@ -108,51 +108,18 @@ function TradingContent() {
   const [activeCategory, setActiveCategory] = useState<"ALL" | "REAL_ESTATE" | "INFRA" | "ART_OTHER">("ALL")
 
   const [wallets, setWallets] = useState<any[]>([])
-  const [userId, setUserId] = useState<number>(1)
 
-  const loadWallets = useCallback(async (currentUserId: number) => {
+  const loadWallets = useCallback(async () => {
     try {
-      const res = await fetchApi<any>(`/api/users/${currentUserId}/mypage`)
+      const res = await fetchApi<any>(`/api/users/me/mypage`)
       setWallets(res.wallets || [])
     } catch (e: any) {
       console.error("Failed to load user wallets:", e)
-      if (e.message && (
-        e.message.includes("not found") || 
-        e.message.includes("NOT_FOUND") || 
-        e.message.includes("User not found")
-      )) {
-        try {
-          const signupRes = await fetchApi<any>("/api/users/signup", {
-            method: "POST",
-            body: JSON.stringify({
-              email: "test-investor@tokit.com",
-              name: "김토킷",
-              walletAddress: "0x70997970C51812dc3A010C7d01b50e0d17dc79C8"
-            })
-          })
-          const newId = signupRes.id
-          setUserId(newId)
-          if (typeof window !== "undefined") {
-            localStorage.setItem("tokit_userId", newId.toString())
-          }
-          // Retry loading wallets
-          const retryRes = await fetchApi<any>(`/api/users/${newId}/mypage`)
-          setWallets(retryRes.wallets || [])
-        } catch (signupErr: any) {
-          console.error("Auto signup inside wallets loader failed", signupErr)
-        }
-      }
     }
   }, [])
 
   useEffect(() => {
-    let savedId = 1
-    if (typeof window !== "undefined") {
-      const raw = localStorage.getItem("tokit_userId")
-      if (raw) savedId = parseInt(raw, 10)
-    }
-    setUserId(savedId)
-    loadWallets(savedId)
+    loadWallets()
   }, [loadWallets])
 
   const krwWallet = wallets.find(w => w.assetSymbol === null || w.assetSymbol === "KRW" || !w.assetSymbol)
@@ -216,7 +183,7 @@ function TradingContent() {
       ? quickContent.trim().slice(0, 15) + "..." 
       : quickContent.trim()
 
-    const makePostRequest = async (targetUserId: number) => {
+    try {
       await fetchApi<any>('/api/posts', {
         method: 'POST',
         headers: {
@@ -225,50 +192,14 @@ function TradingContent() {
         body: JSON.stringify({
           title: titleText,
           content: quickContent,
-          userId: targetUserId,
           assetId: currentAsset.id,
         }),
       })
-    }
-
-    try {
-      await makePostRequest(userId)
       setQuickContent('')
       loadDiscussionPosts(currentAsset.id)
       toast.success("의견이 성공적으로 등록되었습니다.")
     } catch (err: any) {
-      if (err.message && (
-        err.message.includes("not found") || 
-        err.message.includes("NOT_FOUND") || 
-        err.message.includes("User not found")
-      )) {
-        try {
-          // Auto signup
-          const signupRes = await fetchApi<any>("/api/users/signup", {
-            method: "POST",
-            body: JSON.stringify({
-              email: "test-investor@tokit.com",
-              name: "김토킷",
-              walletAddress: "0x70997970C51812dc3A010C7d01b50e0d17dc79C8"
-            })
-          })
-          const newId = signupRes.id
-          setUserId(newId)
-          if (typeof window !== "undefined") {
-            localStorage.setItem("tokit_userId", newId.toString())
-          }
-          // Retry posting
-          await makePostRequest(newId)
-          setQuickContent('')
-          loadDiscussionPosts(currentAsset.id)
-          toast.success("김토킷 테스트 계정이 생성되고 의견이 등록되었습니다!")
-        } catch (signupErr: any) {
-          console.error("Auto signup failed", signupErr)
-          toast.error("유저 가입 실패: " + signupErr.message)
-        }
-      } else {
-        toast.error("의견 등록 실패: " + err.message)
-      }
+      toast.error("의견 등록 실패: " + err.message)
     }
   }
 
@@ -472,7 +403,7 @@ function TradingContent() {
               selectedPrice={selectedPrice}
               availableBalance={availableBalance}
               availableTokens={availableTokens}
-              onOrderSubmit={() => loadWallets(userId)}
+              onOrderSubmit={() => loadWallets()}
             />
             
             <div className="bg-card border border-outline-variant rounded shadow-sm h-full flex flex-col">
