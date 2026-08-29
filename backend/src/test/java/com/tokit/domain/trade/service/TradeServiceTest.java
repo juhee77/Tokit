@@ -18,6 +18,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
+import org.mockito.Spy;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
@@ -49,6 +50,16 @@ class TradeServiceTest {
 
     @Mock
     private OrderEventPublisher orderEventPublisher;
+
+    @Mock
+    private com.tokit.global.observability.TradingMetrics tradingMetrics;
+
+    @Mock
+    private com.tokit.domain.fee.repository.TradeFeeRepository tradeFeeRepository;
+
+    @Spy
+    private com.tokit.domain.fee.service.FeePolicy feePolicy =
+            new com.tokit.domain.fee.service.FeePolicy(new java.math.BigDecimal("0.001"));
 
     private User buyer;
     private User seller;
@@ -115,7 +126,7 @@ class TradeServiceTest {
                 .user(buyer)
                 .asset(null)
                 .balance(new BigDecimal("500000")) // 가용 50만 원
-                .lockedBalance(new BigDecimal("50000")) // 매수 주문으로 5만 원 락
+                .lockedBalance(new BigDecimal("50050")) // 매수 주문 5만 원 + 수수료 50원 락
                 .build();
         setField(buyerKrwWallet, "id", 1000L);
 
@@ -174,13 +185,13 @@ class TradeServiceTest {
         Trade result = tradeService.saveTrade(100L, 200L, "GWANGHWAMUN-STO", tradePrice, tradeQty);
 
         // Then
-        // 1. 매수자: 홀딩 원화 차감 (5만 -> 0원)
+        // 1. 매수자: 홀딩 원화 차감 (50,050 -> 0원)
         assertThat(buyerKrwWallet.getLockedBalance().stripTrailingZeros()).isEqualTo(BigDecimal.ZERO);
         // 2. 매수자: 토큰 수량 증가 (0 -> 5주)
         assertThat(buyerAssetWallet.getBalance().stripTrailingZeros()).isEqualTo(new BigDecimal("5").stripTrailingZeros());
 
-        // 3. 매도자: 원화 잔액 증가 (10만 -> 15만 원)
-        assertThat(sellerKrwWallet.getBalance().stripTrailingZeros()).isEqualTo(new BigDecimal("150000").stripTrailingZeros());
+        // 3. 매도자: 원화 잔액 증가 (10만 + 5만 - 수수료 50원 = 149,950원)
+        assertThat(sellerKrwWallet.getBalance().stripTrailingZeros()).isEqualTo(new BigDecimal("149950").stripTrailingZeros());
         // 4. 매도자: 홀딩 토큰 차감 (5 -> 0주)
         assertThat(sellerAssetWallet.getLockedBalance().stripTrailingZeros()).isEqualTo(BigDecimal.ZERO);
 

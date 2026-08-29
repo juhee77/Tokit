@@ -10,7 +10,9 @@ import com.tokit.domain.user.entity.User;
 import com.tokit.domain.asset.entity.Asset;
 import com.tokit.domain.wallet.entity.Wallet;
 import com.tokit.domain.wallet.repository.WalletRepository;
+import com.tokit.domain.fee.service.FeePolicy;
 import com.tokit.global.exception.BusinessException;
+import com.tokit.global.observability.TradingMetrics;
 import com.tokit.global.exception.ErrorCode;
 import com.tokit.infra.rabbitmq.OrderEvent;
 import com.tokit.infra.rabbitmq.OrderEventPublisher;
@@ -31,6 +33,8 @@ public class OrderService {
     private final AssetService assetService;
     private final WalletRepository walletRepository;
     private final OrderEventPublisher orderEventPublisher;
+    private final TradingMetrics tradingMetrics;
+    private final FeePolicy feePolicy;
 
     @Transactional
     public Order placeOrder(Long userId, String assetSymbol, OrderType orderType, BigDecimal price, BigDecimal quantity) {
@@ -43,10 +47,12 @@ public class OrderService {
             Wallet krwWallet = walletRepository.findKrwWalletByUserIdWithPessimisticLock(userId)
                     .orElseThrow(() -> new IllegalArgumentException("KRW 지갑을 찾을 수 없습니다."));
             BigDecimal totalAmount = price.multiply(quantity);
-            if (krwWallet.getBalance().compareTo(totalAmount) < 0) {
+            // 체결 시점에 수수료를 걷을 수 있도록 주문 금액과 수수료를 함께 홀딩합니다.
+            BigDecimal holdAmount = totalAmount.add(feePolicy.calculate(totalAmount));
+            if (krwWallet.getBalance().compareTo(holdAmount) < 0) {
                 throw new IllegalArgumentException("매수 주문을 위한 예치금이 부족합니다.");
             }
-            krwWallet.updateBalance(krwWallet.getBalance().subtract(totalAmount), krwWallet.getLockedBalance().add(totalAmount));
+            krwWallet.updateBalance(krwWallet.getBalance().subtract(holdAmount), krwWallet.getLockedBalance().add(holdAmount));
         } else {
             Wallet assetWallet = walletRepository.findAssetWalletByUserIdAndAssetIdWithPessimisticLock(userId, asset.getId())
                     .orElseThrow(() -> new IllegalArgumentException("매도할 자산 지갑을 찾을 수 없습니다."));
@@ -79,6 +85,7 @@ public class OrderService {
                 order.getQuantity()
         );
         orderEventPublisher.publishOrder(event);
+        tradingMetrics.recordOrderPlaced();
 
         return order;
     }
@@ -100,7 +107,9 @@ public class OrderService {
         if (order.getOrderType() == OrderType.BUY) {
             Wallet krwWallet = walletRepository.findKrwWalletByUserIdWithPessimisticLock(order.getUserId())
                     .orElseThrow(() -> new IllegalArgumentException("KRW 지갑을 찾을 수 없습니다."));
-            BigDecimal releaseAmount = order.getPrice().multiply(order.getRemainingQuantity());
+            BigDecimal remainingAmount = order.getPrice().multiply(order.getRemainingQuantity());
+            // 홀딩할 때 수수료를 포함했으므로 반환도 동일하게 수수료를 포함해야 합니다.
+            BigDecimal releaseAmount = remainingAmount.add(feePolicy.calculate(remainingAmount));
             krwWallet.updateBalance(krwWallet.getBalance().add(releaseAmount), krwWallet.getLockedBalance().subtract(releaseAmount));
         } else {
             Wallet assetWallet = walletRepository.findAssetWalletByUserIdAndAssetIdWithPessimisticLock(order.getUserId(), order.getAsset().getId())
@@ -110,6 +119,7 @@ public class OrderService {
         }
 
         order.cancel();
+        tradingMetrics.recordOrderCanceled();
     }
 
     public Order getOrderById(Long id) {

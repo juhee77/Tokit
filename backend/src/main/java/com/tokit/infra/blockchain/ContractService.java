@@ -3,6 +3,8 @@ package com.tokit.infra.blockchain;
 import jakarta.annotation.PostConstruct;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.retry.annotation.Backoff;
+import org.springframework.retry.annotation.Retryable;
 import org.springframework.stereotype.Service;
 import org.web3j.abi.FunctionEncoder;
 import org.web3j.abi.FunctionReturnDecoder;
@@ -197,6 +199,10 @@ public class ContractService {
         handleTransferByPartition(this.contractAddress, symbol, partition, from, to, amount);
     }
 
+    @Retryable(
+            retryFor = BlockchainException.class,
+            maxAttempts = 3,
+            backoff = @Backoff(delay = 1000, multiplier = 2.0))
     public void handleTransferByPartition(String targetContractAddress, String symbol, String partition, String from, String to, BigDecimal amount) {
         log.info("Executing Admin Force Partition Transfer. TargetContract: {}, Symbol: {}, Partition: {}, From: {}, To: {}, Amount: {}",
                 targetContractAddress, symbol, partition, from, to, amount);
@@ -240,7 +246,7 @@ public class ContractService {
 
             if (response.hasError()) {
                 log.error("Blockchain force transfer TX failed: {}", response.getError().getMessage());
-                throw new RuntimeException("Blockchain TX Error: " + response.getError().getMessage());
+                throw new BlockchainException("Blockchain TX Error: " + response.getError().getMessage());
             }
 
             String txHash = response.getTransactionHash();
@@ -255,14 +261,32 @@ public class ContractService {
                         receipt.getBlockNumber(), receipt.getGasUsed());
             } else {
                 log.error("Force Partition Transfer transaction status is failed (reverted). Receipt: {}", receipt);
-                throw new RuntimeException("Blockchain TX reverted");
+                throw new BlockchainException("Blockchain TX reverted");
             }
 
+        } catch (BlockchainException e) {
+            throw e;
         } catch (Exception e) {
             log.error("Failed to execute forceTransferByPartition on blockchain", e);
-            throw new RuntimeException(e);
+            throw new BlockchainException("Failed to execute forceTransferByPartition", e);
         }
     }
+
+    /**
+     * 블록체인 노드 연결 상태 점검. 헬스체크 용도이며 트랜잭션을 발생시키지 않습니다.
+     */
+    public NodeStatus checkNodeStatus() {
+        try {
+            String clientVersion = web3j.web3ClientVersion().send().getWeb3ClientVersion();
+            BigInteger blockNumber = web3j.ethBlockNumber().send().getBlockNumber();
+            return new NodeStatus(true, clientVersion, blockNumber, null);
+        } catch (Exception e) {
+            log.warn("Blockchain node status check failed: {}", e.getMessage());
+            return new NodeStatus(false, null, null, e.getMessage());
+        }
+    }
+
+    public record NodeStatus(boolean reachable, String clientVersion, BigInteger blockNumber, String error) {}
 
     /**
      * 특정 주주(지갑)의 온체인 파티션 토큰 잔고 조회

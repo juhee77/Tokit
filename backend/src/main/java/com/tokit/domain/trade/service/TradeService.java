@@ -9,6 +9,10 @@ import com.tokit.domain.asset.entity.Asset;
 import com.tokit.domain.asset.repository.AssetRepository;
 import com.tokit.domain.wallet.entity.Wallet;
 import com.tokit.domain.wallet.repository.WalletRepository;
+import com.tokit.domain.fee.entity.TradeFee;
+import com.tokit.domain.fee.repository.TradeFeeRepository;
+import com.tokit.domain.fee.service.FeePolicy;
+import com.tokit.global.observability.TradingMetrics;
 import com.tokit.infra.rabbitmq.TradeEvent;
 import com.tokit.infra.rabbitmq.OrderEventPublisher;
 import lombok.RequiredArgsConstructor;
@@ -36,6 +40,9 @@ public class TradeService {
     private final AssetRepository assetRepository;
     private final WalletRepository walletRepository;
     private final OrderEventPublisher orderEventPublisher;
+    private final TradingMetrics tradingMetrics;
+    private final FeePolicy feePolicy;
+    private final TradeFeeRepository tradeFeeRepository;
     
     // 심볼별 SSE Emitter 리스트 관리
     private final Map<String, List<SseEmitter>> emitters = new ConcurrentHashMap<>();
@@ -58,8 +65,9 @@ public class TradeService {
                 .tradedAt(LocalDateTime.now())
                 .build();
         
-        // 1. 체결 금액 및 수량 계산
+        // 1. 체결 금액 및 수수료 계산 (매수/매도 양측 편도 부과)
         BigDecimal totalAmount = price.multiply(quantity);
+        BigDecimal fee = feePolicy.calculate(totalAmount);
 
         // 2. 매수자(Buyer)와 매도자(Seller)의 원화(KRW) 지갑 비관적 락 조회 및 업데이트
         Wallet buyerKrwWallet = walletRepository.findKrwWalletByUserIdWithPessimisticLock(buyOrder.getUser().getId())
@@ -67,10 +75,14 @@ public class TradeService {
         Wallet sellerKrwWallet = walletRepository.findKrwWalletByUserIdWithPessimisticLock(sellOrder.getUser().getId())
                 .orElseThrow(() -> new IllegalArgumentException("Seller KRW wallet not found"));
 
-        // 매수자: 홀딩된 원화 차감
-        buyerKrwWallet.updateBalance(buyerKrwWallet.getBalance(), buyerKrwWallet.getLockedBalance().subtract(totalAmount));
-        // 매도자: 원화 잔고 증가
-        sellerKrwWallet.updateBalance(sellerKrwWallet.getBalance().add(totalAmount), sellerKrwWallet.getLockedBalance());
+        // 매수자: 주문 시 체결대금과 함께 홀딩해 둔 수수료를 같이 차감
+        buyerKrwWallet.updateBalance(
+                buyerKrwWallet.getBalance(),
+                buyerKrwWallet.getLockedBalance().subtract(totalAmount).subtract(fee));
+        // 매도자: 매도 대금에서 수수료를 제한 금액을 수령
+        sellerKrwWallet.updateBalance(
+                sellerKrwWallet.getBalance().add(totalAmount).subtract(fee),
+                sellerKrwWallet.getLockedBalance());
 
         // 3. 매수자(Buyer)와 매도자(Seller)의 토큰(Asset) 지갑 비관적 락 조회 및 업데이트
         // 매수자는 지갑이 없을 수 있으므로 없으면 새로 생성 후 락
@@ -108,6 +120,11 @@ public class TradeService {
         );
         orderEventPublisher.publishTrade(tradeEvent);
         
+        recordFee(savedTrade, buyOrder.getUser(), TradeFee.FeeSide.BUY, totalAmount, fee);
+        recordFee(savedTrade, sellOrder.getUser(), TradeFee.FeeSide.SELL, totalAmount, fee);
+
+        tradingMetrics.recordTradeSettled();
+
         // 실시간 스트리밍 전송
         broadcastTrade(savedTrade);
         
@@ -172,5 +189,21 @@ public class TradeService {
         return tradeRepository.findCandlesBySymbol(symbol).stream()
                 .map(CandleResponse::from)
                 .toList();
+    }
+
+    private void recordFee(Trade trade, com.tokit.domain.user.entity.User user,
+                           TradeFee.FeeSide side, BigDecimal taxableAmount, BigDecimal feeAmount) {
+        if (feeAmount.signum() <= 0) {
+            return;
+        }
+        tradeFeeRepository.save(TradeFee.builder()
+                .trade(trade)
+                .user(user)
+                .side(side)
+                .taxableAmount(taxableAmount)
+                .feeAmount(feeAmount)
+                .feeRate(feePolicy.getRate())
+                .chargedAt(LocalDateTime.now())
+                .build());
     }
 }

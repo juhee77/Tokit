@@ -51,6 +51,12 @@ class OrderServiceTest {
     @Mock
     private OrderEventPublisher orderEventPublisher;
 
+    @Mock
+    private com.tokit.global.observability.TradingMetrics tradingMetrics;
+
+    @Mock
+    private com.tokit.domain.fee.service.FeePolicy feePolicy;
+
     private User buyer;
     private User seller;
     private Asset testAsset;
@@ -59,6 +65,12 @@ class OrderServiceTest {
 
     @BeforeEach
     void setUp() {
+        lenient().when(feePolicy.calculate(any())).thenReturn(BigDecimal.ZERO);
+        lenient().when(orderRepository.save(any(Order.class))).thenAnswer(invocation -> {
+            Order o = invocation.getArgument(0);
+            ReflectionTestUtils.setField(o, "id", 999L);
+            return o;
+        });
         buyer = User.builder()
                 .name("Order Buyer")
                 .email("buyer.order@tokit.com")
