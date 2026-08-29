@@ -19,24 +19,22 @@ class CommunityDTORecordTest {
     @DisplayName("CreatePostRequest DTO 레코드 검증: 게시글 생성 요청 파라미터가 정상 저장된다.")
     void createPostRequest_InstantiationAndAccessors() {
         // Given & When
-        CreatePostRequest request = new CreatePostRequest("송도 STO 배당전망", "배당 수익률 관련 질문입니다.", 1L, 2L);
+        CreatePostRequest request = new CreatePostRequest("송도 STO 배당전망", "배당 수익률 관련 질문입니다.", 2L);
 
         // Then
         assertThat(request.title()).isEqualTo("송도 STO 배당전망");
         assertThat(request.content()).isEqualTo("배당 수익률 관련 질문입니다.");
-        assertThat(request.userId()).isEqualTo(1L);
         assertThat(request.assetId()).isEqualTo(2L);
     }
 
     @Test
-    @DisplayName("CreateCommentRequest DTO 레코드 검증: 댓글 생성 요청 내용과 사용자 ID가 정상 저장된다.")
+    @DisplayName("CreateCommentRequest DTO 레코드 검증: 댓글 생성 요청 내용이 정상 저장된다.")
     void createCommentRequest_InstantiationAndAccessors() {
         // Given & When
-        CreateCommentRequest request = new CreateCommentRequest("동의합니다!", 5L);
+        CreateCommentRequest request = new CreateCommentRequest("동의합니다!");
 
         // Then
         assertThat(request.content()).isEqualTo("동의합니다!");
-        assertThat(request.userId()).isEqualTo(5L);
     }
 
     @Test

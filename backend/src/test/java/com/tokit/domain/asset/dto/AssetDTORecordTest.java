@@ -31,13 +31,12 @@ class AssetDTORecordTest {
     }
 
     @Test
-    @DisplayName("SubscribeAssetRequest DTO 레코드 검증: 공모 청약 요청 사용자 ID와 신청 금액이 정확히 저장된다.")
+    @DisplayName("SubscribeAssetRequest DTO 레코드 검증: 공모 청약 신청 금액이 정확히 저장된다.")
     void subscribeAssetRequest_InstantiationAndAccessors() {
         // Given & When
-        SubscribeAssetRequest request = new SubscribeAssetRequest(5L, new BigDecimal("500000"));
+        SubscribeAssetRequest request = new SubscribeAssetRequest(new BigDecimal("500000"));
 
         // Then
-        assertThat(request.userId()).isEqualTo(5L);
         assertThat(request.amount()).isEqualTo(new BigDecimal("500000"));
     }
 

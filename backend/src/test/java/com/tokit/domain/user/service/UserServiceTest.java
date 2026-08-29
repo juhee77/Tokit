@@ -42,6 +42,9 @@ class UserServiceTest {
     @Mock
     private AssetRepository assetRepository;
 
+    @Mock
+    private org.springframework.security.crypto.password.PasswordEncoder passwordEncoder;
+
     private User testUser;
     private Asset defaultAsset;
 
@@ -77,9 +80,10 @@ class UserServiceTest {
         when(userRepository.findByEmail("investor.new@tokit.com")).thenReturn(Optional.empty());
         when(userRepository.save(any(User.class))).thenReturn(testUser);
         when(assetRepository.findBySymbol("HDYT")).thenReturn(Optional.of(defaultAsset));
+        when(passwordEncoder.encode("tokit1234")).thenReturn("$2a$10$hashed");
 
         // When
-        User result = userService.signUp("investor.new@tokit.com", "New Investor", "0xINVESTOR_WALLET_ADDRESS_99");
+        User result = userService.signUp("investor.new@tokit.com", "New Investor", "tokit1234", "0xINVESTOR_WALLET_ADDRESS_99");
 
         // Then
         assertThat(result).isNotNull();

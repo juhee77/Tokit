@@ -17,6 +17,10 @@ public enum ErrorCode {
     MEMBER_NOT_FOUND(HttpStatus.NOT_FOUND, "M001", " User not found"),
     EMAIL_DUPLICATION(HttpStatus.BAD_REQUEST, "M002", " Email already registered"),
 
+    // Auth Exceptions
+    INVALID_CREDENTIALS(HttpStatus.UNAUTHORIZED, "S001", " Email or password is incorrect"),
+    AUTHENTICATION_REQUIRED(HttpStatus.UNAUTHORIZED, "S002", " Authentication required"),
+
     // Asset Exceptions
     ASSET_NOT_FOUND(HttpStatus.NOT_FOUND, "A001", " Security Token not found"),
     INSUFFICIENT_BALANCE(HttpStatus.BAD_REQUEST, "A002", " Insufficient token balance"),

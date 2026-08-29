@@ -30,8 +30,8 @@ class IdempotentAnnotationTest {
     @DisplayName("@Idempotent 반영 검증: OrderController 및 WalletController CUD 메소드에 @Idempotent가 부착되어 있다.")
     void idempotentAnnotation_PresentOnControllers() throws Exception {
         // Given & When
-        Method placeOrderMethod = OrderController.class.getMethod("placeOrder", String.class, OrderController.PlaceOrderRequest.class);
-        Method depositKrwMethod = WalletController.class.getMethod("depositKrw", String.class, WalletController.WalletAmountRequest.class);
+        Method placeOrderMethod = OrderController.class.getMethod("placeOrder", String.class, com.tokit.global.security.AuthUser.class, OrderController.PlaceOrderRequest.class);
+        Method depositKrwMethod = WalletController.class.getMethod("depositKrw", String.class, com.tokit.global.security.AuthUser.class, WalletController.WalletAmountRequest.class);
 
         // Then
         assertThat(placeOrderMethod.isAnnotationPresent(Idempotent.class)).isTrue();

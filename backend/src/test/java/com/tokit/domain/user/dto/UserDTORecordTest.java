@@ -10,14 +10,15 @@ import static org.assertj.core.api.Assertions.assertThat;
 class UserDTORecordTest {
 
     @Test
-    @DisplayName("SignUpRequest DTO 레코드 검증: 회원가입 요청 이메일, 이름, 지갑 주소가 정확히 캡슐화된다.")
+    @DisplayName("SignUpRequest DTO 레코드 검증: 회원가입 요청 이메일, 이름, 비밀번호, 지갑 주소가 정확히 캡슐화된다.")
     void signUpRequest_InstantiationAndAccessors() {
         // Given & When
-        SignUpRequest request = new SignUpRequest("user@tokit.com", "Juhee", "0xWALLET_ADDRESS");
+        SignUpRequest request = new SignUpRequest("user@tokit.com", "Juhee", "tokit1234", "0xWALLET_ADDRESS");
 
         // Then
         assertThat(request.email()).isEqualTo("user@tokit.com");
         assertThat(request.name()).isEqualTo("Juhee");
+        assertThat(request.password()).isEqualTo("tokit1234");
         assertThat(request.walletAddress()).isEqualTo("0xWALLET_ADDRESS");
     }
 

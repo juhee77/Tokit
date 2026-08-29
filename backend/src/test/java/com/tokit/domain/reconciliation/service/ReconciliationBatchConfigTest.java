@@ -51,6 +51,9 @@ class ReconciliationBatchConfigTest {
     @Mock
     private AdminAlertController adminAlertController;
 
+    @Mock
+    private com.tokit.global.observability.TradingMetrics tradingMetrics;
+
 
 
     private User testUser;

@@ -34,6 +34,10 @@ public class BlockchainInitializer implements CommandLineRunner {
     private final ContractService contractService;
     private final EntityManager entityManager;
     private final org.springframework.core.env.Environment environment;
+    private final org.springframework.security.crypto.password.PasswordEncoder passwordEncoder;
+
+    // 로컬 시드 계정 공용 비밀번호. 실제 배포 전 반드시 폐기해야 합니다.
+    private static final String SEED_PASSWORD = "tokit1234";
     
     public boolean forceExecute = false;
 
@@ -86,9 +90,9 @@ public class BlockchainInitializer implements CommandLineRunner {
         if (userRepository.findById(1L).isEmpty() && userRepository.findByEmail("test-investor@tokit.com").isEmpty()) {
             log.info("Force inserting default user (ID=1) '김토킷' via native query...");
             entityManager.createNativeQuery(
-                "INSERT INTO users (id, name, email, wallet_address, kyc_status, investor_type) " +
-                "VALUES (1, '김토킷', 'test-investor@tokit.com', '0x70997970C51812dc3A010C7d01b50e0d17dc79C8', true, 'GENERAL')"
-            ).executeUpdate();
+                "INSERT INTO users (id, name, email, password, wallet_address, kyc_status, investor_type, role) " +
+                "VALUES (1, '김토킷', 'test-investor@tokit.com', :password, '0x70997970C51812dc3A010C7d01b50e0d17dc79C8', true, 'GENERAL', 'ADMIN')"
+            ).setParameter("password", passwordEncoder.encode(SEED_PASSWORD)).executeUpdate();
 
             User defaultUser = userRepository.findById(1L).get();
             walletRepository.save(Wallet.builder()
@@ -176,6 +180,7 @@ public class BlockchainInitializer implements CommandLineRunner {
                 User newUser = userRepository.save(User.builder()
                         .name(name)
                         .email(email)
+                        .password(passwordEncoder.encode(SEED_PASSWORD))
                         .walletAddress(walletAddr)
                         .kycStatus(true)
                         .investorType(type)

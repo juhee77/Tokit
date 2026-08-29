@@ -1,7 +1,10 @@
 package com.tokit.domain.asset.service;
 
 import com.tokit.domain.asset.entity.Asset;
+import com.tokit.domain.asset.entity.Subscription;
 import com.tokit.domain.asset.repository.AssetRepository;
+import com.tokit.domain.asset.repository.SubscriptionRepository;
+import com.tokit.domain.user.entity.InvestorType;
 import com.tokit.domain.user.entity.User;
 import com.tokit.domain.user.repository.UserRepository;
 import com.tokit.domain.wallet.entity.Wallet;
@@ -17,6 +20,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
+import java.time.LocalDateTime;
 import java.util.List;
 
 @Service
@@ -29,6 +33,7 @@ public class AssetService {
     private final WalletRepository walletRepository;
     private final ContractService contractService;
     private final IssuerRepository issuerRepository;
+    private final SubscriptionRepository subscriptionRepository;
 
     @Transactional
     public Asset registerAsset(String symbol, String name, String contractAddress, BigDecimal totalSupply,
@@ -110,13 +115,8 @@ public class AssetService {
                         .lockedBalance(BigDecimal.ZERO)
                         .build());
 
-        // 투자자 등급 한도 검증
-        BigDecimal currentInvestedAmount = assetWallet.getBalance().multiply(asset.getIssuePrice());
-        BigDecimal totalProjectedInvestment = currentInvestedAmount.add(amount);
-        BigDecimal limit = user.getInvestorType().getLimitAmount();
-        if (limit != null && totalProjectedInvestment.compareTo(limit) > 0) {
-            throw new BusinessException("투자 한도를 초과하여 청약할 수 없습니다. (투자 한도: " + limit + " KRW)", ErrorCode.INVALID_INPUT_VALUE);
-        }
+        // 투자자 등급 한도 검증 (발행인별 + 연간 누적)
+        verifyInvestmentLimits(user, asset, amount);
 
         // 3. 잔액 차감 및 영속화
         krwWallet.updateBalance(krwWallet.getBalance().subtract(amount), krwWallet.getLockedBalance());
@@ -127,6 +127,16 @@ public class AssetService {
         if (assetWallet.getId() == null) {
             walletRepository.save(assetWallet);
         }
+
+        // 한도 검증의 근거가 되는 청약 이력을 남깁니다.
+        subscriptionRepository.save(Subscription.builder()
+                .user(user)
+                .asset(asset)
+                .issuer(asset.getIssuer())
+                .amount(amount)
+                .tokenQuantity(tokenQuantity)
+                .subscribedAt(LocalDateTime.now())
+                .build());
 
         // 4. 온체인 토큰 강제 전송 실행 (Admin/Deployer -> User)
         String deployerAddress = "0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266";
@@ -175,5 +185,41 @@ public class AssetService {
                 row -> (Long) row[1],
                 (v1, v2) -> v1
         ));
+    }
+
+    /**
+     * 발행인별·연간 누적 청약 한도를 함께 검증합니다.
+     *
+     * <p>이전에는 해당 자산의 지갑 잔고만 확인했기 때문에, 같은 발행인의 다른 종목으로
+     * 나누어 청약하면 한도를 우회할 수 있었습니다. 이제 청약 이력을 합산해 판단합니다.
+     */
+    private void verifyInvestmentLimits(User user, Asset asset, BigDecimal amount) {
+        InvestorType investorType = user.getInvestorType();
+
+        BigDecimal perIssuerLimit = investorType.getPerIssuerLimit();
+        if (perIssuerLimit != null) {
+            BigDecimal issuerTotal = subscriptionRepository
+                    .sumAmountByUserAndIssuer(user.getId(), asset.getIssuer().getId())
+                    .add(amount);
+            if (issuerTotal.compareTo(perIssuerLimit) > 0) {
+                throw new BusinessException(
+                        String.format("동일 발행인 투자 한도를 초과하여 청약할 수 없습니다. (한도: %s KRW, 청약 후 누적: %s KRW)",
+                                perIssuerLimit.toPlainString(), issuerTotal.toPlainString()),
+                        ErrorCode.INVALID_INPUT_VALUE);
+            }
+        }
+
+        BigDecimal annualLimit = investorType.getAnnualLimit();
+        if (annualLimit != null) {
+            BigDecimal annualTotal = subscriptionRepository
+                    .sumAmountByUserSince(user.getId(), LocalDateTime.now().minusYears(1))
+                    .add(amount);
+            if (annualTotal.compareTo(annualLimit) > 0) {
+                throw new BusinessException(
+                        String.format("연간 누적 투자 한도를 초과하여 청약할 수 없습니다. (한도: %s KRW, 청약 후 누적: %s KRW)",
+                                annualLimit.toPlainString(), annualTotal.toPlainString()),
+                        ErrorCode.INVALID_INPUT_VALUE);
+            }
+        }
     }
 }

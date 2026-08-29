@@ -22,6 +22,7 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.context.annotation.Lazy;
 import org.springframework.data.domain.Sort;
+import com.tokit.global.observability.TradingMetrics;
 import com.tokit.infra.alert.SlackAlertService;
 import com.tokit.domain.alert.controller.AdminAlertController;
 
@@ -38,17 +39,20 @@ public class ReconciliationBatchConfig extends DefaultBatchConfiguration {
     private final ContractService contractService;
     private final SlackAlertService slackAlertService;
     private final AdminAlertController adminAlertController;
+    private final TradingMetrics tradingMetrics;
 
     public ReconciliationBatchConfig(@Lazy WalletRepository walletRepository,
                                     @Lazy ReconciliationLogRepository reconciliationLogRepository,
                                     ContractService contractService,
                                     @Lazy SlackAlertService slackAlertService,
-                                    @Lazy AdminAlertController adminAlertController) {
+                                    @Lazy AdminAlertController adminAlertController,
+                                    @Lazy TradingMetrics tradingMetrics) {
         this.walletRepository = walletRepository;
         this.reconciliationLogRepository = reconciliationLogRepository;
         this.contractService = contractService;
         this.slackAlertService = slackAlertService;
         this.adminAlertController = adminAlertController;
+        this.tradingMetrics = tradingMetrics;
     }
 
     @Bean
@@ -101,6 +105,8 @@ public class ReconciliationBatchConfig extends DefaultBatchConfiguration {
             log.error("AUDIT DISCREPANCY DETECTED! User: {} ({}), Asset: {}, Off-chain: {}, On-chain: {}, Diff: {}",
                     wallet.getUser().getName(), walletAddress, symbol, offchainBalance, onchainBalance, difference);
             
+            tradingMetrics.recordReconciliationMismatch(difference);
+
             return ReconciliationLog.builder()
                     .user(wallet.getUser())
                     .asset(wallet.getAsset())

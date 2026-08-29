@@ -44,6 +44,9 @@ class ReconciliationBatchTest {
     @Mock
     private AdminAlertController adminAlertController;
 
+    @Mock
+    private com.tokit.global.observability.TradingMetrics tradingMetrics;
+
     @BeforeEach
     void setUp() {
         reconciliationBatchConfig = new ReconciliationBatchConfig(
@@ -51,7 +54,8 @@ class ReconciliationBatchTest {
                 reconciliationLogRepository,
                 contractService,
                 slackAlertService,
-                adminAlertController
+                adminAlertController,
+                tradingMetrics
         );
     }
 

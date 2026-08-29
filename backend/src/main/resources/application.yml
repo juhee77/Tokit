@@ -55,6 +55,23 @@ spring:
 server:
   port: ${PORT:8080}
 
+# 운영 모니터링 노출. 관리 포트를 분리해 공개 API 표면에 올라가지 않게 합니다.
+management:
+  server:
+    port: ${MANAGEMENT_PORT:8081}
+  endpoints:
+    web:
+      exposure:
+        include: health,info,prometheus,metrics
+  endpoint:
+    health:
+      show-details: always
+      probes:
+        enabled: true
+  metrics:
+    tags:
+      application: tokit-backend
+
 logging:
   level:
     root: INFO
@@ -63,6 +80,13 @@ logging:
 
 # Custom configurations
 tokit:
+  fee:
+    # 2차 거래 편도 수수료율 (매수/매도 각각 부과). 0.001 = 0.1%
+    trading-rate: ${TRADING_FEE_RATE:0.001}
+  jwt:
+    # 로컬 개발용 기본 시크릿. 운영 환경에서는 반드시 JWT_SECRET 환경변수로 주입해야 합니다.
+    secret: ${JWT_SECRET:tokit-local-development-secret-key-do-not-use-in-production-0123456789}
+    expiration-ms: ${JWT_EXPIRATION_MS:86400000}
   blockchain:
     rpc-url: ${BLOCKCHAIN_RPC_URL:http://localhost:8545}
     contract-address: ${BLOCKCHAIN_CONTRACT_ADDRESS:0x5FbDB2315678afecb367f032d93F642f64180aa3}

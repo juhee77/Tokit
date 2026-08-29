@@ -9,6 +9,7 @@ import com.tokit.global.exception.BusinessException;
 import com.tokit.global.exception.ErrorCode;
 import com.tokit.infra.blockchain.ContractService;
 import lombok.RequiredArgsConstructor;
+import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import java.util.List;
@@ -22,40 +23,46 @@ public class UserService {
     private final ContractService contractService;
     private final WalletRepository walletRepository;
     private final AssetRepository assetRepository;
+    private final PasswordEncoder passwordEncoder;
 
     @Transactional
-    public User signUp(String email, String name, String walletAddress) {
-        return userRepository.findByEmail(email)
-                .orElseGet(() -> {
-                    User newUser = userRepository.save(User.builder()
-                            .email(email)
-                            .name(name)
-                            .walletAddress(walletAddress)
-                            .build());
+    public User signUp(String email, String name, String rawPassword, String walletAddress) {
+        if (userRepository.findByEmail(email).isPresent()) {
+            throw new BusinessException(ErrorCode.EMAIL_DUPLICATION);
+        }
+        return createUserWithSeededWallets(email, name, rawPassword, walletAddress);
+    }
 
-                    // 기본 원화(KRW) 예치금 지갑 자동 개설 (10,000,000 KRW)
-                    walletRepository.save(Wallet.builder()
-                            .user(newUser)
-                            .asset(null)
-                            .balance(java.math.BigDecimal.valueOf(10000000.0))
-                            .lockedBalance(java.math.BigDecimal.ZERO)
-                            .build());
+    private User createUserWithSeededWallets(String email, String name, String rawPassword, String walletAddress) {
+        User newUser = userRepository.save(User.builder()
+                .email(email)
+                .name(name)
+                .password(passwordEncoder.encode(rawPassword))
+                .walletAddress(walletAddress)
+                .build());
 
-                    // 대표 토큰증권 보유 지갑 개설 및 초기 보유량 시딩
-                    List<String> defaultSymbols = List.of("HDYT", "GNPM", "BSND", "JJIS");
-                    for (String symbol : defaultSymbols) {
-                        assetRepository.findBySymbol(symbol).ifPresent(asset -> {
-                            walletRepository.save(Wallet.builder()
-                                    .user(newUser)
-                                    .asset(asset)
-                                    .balance(java.math.BigDecimal.valueOf(1000.0))
-                                    .lockedBalance(java.math.BigDecimal.ZERO)
-                                    .build());
-                        });
-                    }
+        // 기본 원화(KRW) 예치금 지갑 자동 개설 (10,000,000 KRW)
+        walletRepository.save(Wallet.builder()
+                .user(newUser)
+                .asset(null)
+                .balance(java.math.BigDecimal.valueOf(10000000.0))
+                .lockedBalance(java.math.BigDecimal.ZERO)
+                .build());
 
-                    return newUser;
-                });
+        // 대표 토큰증권 보유 지갑 개설 및 초기 보유량 시딩
+        List<String> defaultSymbols = List.of("HDYT", "GNPM", "BSND", "JJIS");
+        for (String symbol : defaultSymbols) {
+            assetRepository.findBySymbol(symbol).ifPresent(asset -> {
+                walletRepository.save(Wallet.builder()
+                        .user(newUser)
+                        .asset(asset)
+                        .balance(java.math.BigDecimal.valueOf(1000.0))
+                        .lockedBalance(java.math.BigDecimal.ZERO)
+                        .build());
+            });
+        }
+
+        return newUser;
     }
 
     public User getUserById(Long id) {

@@ -25,6 +25,9 @@ public class User {
     @Column(nullable = false, unique = true)
     private String email;
 
+    @Column(nullable = false)
+    private String password; // BCrypt 해시
+
     @Column(name = "wallet_address", nullable = false)
     private String walletAddress; // 블록체인 지갑 주소
 
@@ -32,13 +35,24 @@ public class User {
     @Column(name = "investor_type", nullable = false)
     private InvestorType investorType;
 
+    @Enumerated(EnumType.STRING)
+    @Column(nullable = false)
+    private Role role;
+
     @Builder
-    public User(String name, boolean kycStatus, String email, String walletAddress, InvestorType investorType) {
+    public User(String name, boolean kycStatus, String email, String password, String walletAddress,
+                InvestorType investorType, Role role) {
         this.name = name;
         this.kycStatus = kycStatus;
         this.email = email;
+        this.password = password;
         this.walletAddress = walletAddress;
         this.investorType = investorType != null ? investorType : InvestorType.GENERAL;
+        this.role = role != null ? role : Role.USER;
+    }
+
+    public boolean isAdmin() {
+        return role == Role.ADMIN;
     }
 
     public void updateKycStatus(boolean kycStatus) {

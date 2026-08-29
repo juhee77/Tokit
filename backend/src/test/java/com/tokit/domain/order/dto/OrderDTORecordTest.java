@@ -21,11 +21,10 @@ class OrderDTORecordTest {
     void placeOrderRequest_InstantiationAndAccessors() {
         // Given & When
         PlaceOrderRequest request = new PlaceOrderRequest(
-                1L, "GNPM", OrderType.BUY, new BigDecimal("150000"), new BigDecimal("10")
+                "GNPM", OrderType.BUY, new BigDecimal("150000"), new BigDecimal("10")
         );
 
         // Then
-        assertThat(request.userId()).isEqualTo(1L);
         assertThat(request.assetSymbol()).isEqualTo("GNPM");
         assertThat(request.orderType()).isEqualTo(OrderType.BUY);
         assertThat(request.price()).isEqualTo(new BigDecimal("150000"));
