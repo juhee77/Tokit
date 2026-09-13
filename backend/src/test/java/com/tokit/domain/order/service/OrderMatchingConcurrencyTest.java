@@ -9,6 +9,8 @@ import com.tokit.domain.order.entity.OrderStatus;
 import com.tokit.domain.order.entity.OrderType;
 import com.tokit.domain.order.repository.OrderRepository;
 import com.tokit.domain.trade.entity.Trade;
+import com.tokit.domain.fee.repository.TradeFeeRepository;
+import com.tokit.domain.fee.service.FeePolicy;
 import com.tokit.domain.trade.repository.TradeRepository;
 import com.tokit.domain.user.entity.User;
 import com.tokit.domain.user.repository.UserRepository;
@@ -58,6 +60,12 @@ class OrderMatchingConcurrencyTest {
     @Autowired
     private TradeRepository tradeRepository;
 
+    @Autowired
+    private TradeFeeRepository tradeFeeRepository;
+
+    @Autowired
+    private FeePolicy feePolicy;
+
     @MockitoBean
     private ContractService contractService;
 
@@ -68,6 +76,7 @@ class OrderMatchingConcurrencyTest {
     @BeforeEach
     void setUp() {
         // 1. Clean up database
+        tradeFeeRepository.deleteAll();
         tradeRepository.deleteAll();
         orderRepository.deleteAll();
         walletRepository.deleteAll();
@@ -98,6 +107,7 @@ class OrderMatchingConcurrencyTest {
                     .name("Buyer " + i)
                     .email("buyer-" + uniqueId + "-" + i + "@test.com")
                     .walletAddress("0xBuyerWalletAddress" + i)
+                    .password("{noop}test-password")
                     .kycStatus(true)
                     .build());
             buyers.add(buyer);
@@ -114,6 +124,7 @@ class OrderMatchingConcurrencyTest {
                     .name("Seller " + i)
                     .email("seller-" + uniqueId + "-" + i + "@test.com")
                     .walletAddress("0xSellerWalletAddress" + i)
+                    .password("{noop}test-password")
                     .kycStatus(true)
                     .build());
             sellers.add(seller);
@@ -138,6 +149,7 @@ class OrderMatchingConcurrencyTest {
 
     @AfterEach
     void tearDown() {
+        tradeFeeRepository.deleteAll();
         tradeRepository.deleteAll();
         orderRepository.deleteAll();
         walletRepository.deleteAll();
@@ -230,6 +242,13 @@ class OrderMatchingConcurrencyTest {
         // Each seller sold 5 tokens for 50,000 KRW.
         // Expected seller balance: 50,000 KRW, 5 tokens.
 
+        // 체결 대금 50,000원에 대한 편도 수수료. 요율 상수를 테스트에 박아두면 정책이 바뀔 때
+        // 다시 썩으므로 FeePolicy에서 직접 계산합니다.
+        BigDecimal tradeAmount = BigDecimal.valueOf(50000);
+        BigDecimal feePerSide = feePolicy.calculate(tradeAmount);
+        // 매수자: 100,000 - (체결대금 + 수수료), 매도자: 0 + (체결대금 - 수수료) → 양쪽 모두 같은 금액
+        BigDecimal expectedKrw = tradeAmount.subtract(feePerSide);
+
         BigDecimal totalKrw = BigDecimal.ZERO;
         BigDecimal totalTokens = BigDecimal.ZERO;
 
@@ -237,7 +256,7 @@ class OrderMatchingConcurrencyTest {
             Wallet krwWallet = walletRepository.findKrwWalletByUserId(buyer.getId()).orElseThrow();
             Wallet tokenWallet = walletRepository.findByUserIdAndAssetId(buyer.getId(), testAsset.getId()).orElseThrow();
 
-            assertThat(krwWallet.getBalance().stripTrailingZeros()).isEqualTo(BigDecimal.valueOf(50000).stripTrailingZeros());
+            assertThat(krwWallet.getBalance().stripTrailingZeros()).isEqualTo(expectedKrw.stripTrailingZeros());
             assertThat(krwWallet.getLockedBalance().stripTrailingZeros()).isEqualTo(BigDecimal.ZERO.stripTrailingZeros());
             assertThat(tokenWallet.getBalance().stripTrailingZeros()).isEqualTo(BigDecimal.valueOf(5).stripTrailingZeros());
 
@@ -249,7 +268,7 @@ class OrderMatchingConcurrencyTest {
             Wallet krwWallet = walletRepository.findKrwWalletByUserId(seller.getId()).orElseThrow();
             Wallet tokenWallet = walletRepository.findByUserIdAndAssetId(seller.getId(), testAsset.getId()).orElseThrow();
 
-            assertThat(krwWallet.getBalance().stripTrailingZeros()).isEqualTo(BigDecimal.valueOf(50000).stripTrailingZeros());
+            assertThat(krwWallet.getBalance().stripTrailingZeros()).isEqualTo(expectedKrw.stripTrailingZeros());
             assertThat(krwWallet.getLockedBalance().stripTrailingZeros()).isEqualTo(BigDecimal.ZERO.stripTrailingZeros());
             assertThat(tokenWallet.getBalance().stripTrailingZeros()).isEqualTo(BigDecimal.valueOf(5).stripTrailingZeros());
 
@@ -257,8 +276,16 @@ class OrderMatchingConcurrencyTest {
             totalTokens = totalTokens.add(tokenWallet.getBalance());
         }
 
-        // 4. Verify conservation of money and assets
-        assertThat(totalKrw.stripTrailingZeros()).isEqualTo(BigDecimal.valueOf(1000000).stripTrailingZeros());
+        // 4. 보존 법칙: 지갑 잔고 총합 + 수수료 원장 총합 = 최초 투입 원화
+        //    (돈이 사라지면 안 되고, 줄어든 만큼은 반드시 수수료 원장에 적립되어 있어야 합니다)
+        BigDecimal totalFees = tradeFeeRepository.findAll().stream()
+                .map(fee -> fee.getFeeAmount())
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
+
+        assertThat(totalFees.stripTrailingZeros())
+                .isEqualTo(feePerSide.multiply(BigDecimal.valueOf(orderCount * 2L)).stripTrailingZeros());
+        assertThat(totalKrw.add(totalFees).stripTrailingZeros())
+                .isEqualTo(BigDecimal.valueOf(1000000).stripTrailingZeros());
         assertThat(totalTokens.stripTrailingZeros()).isEqualTo(BigDecimal.valueOf(100).stripTrailingZeros());
     }
 }
