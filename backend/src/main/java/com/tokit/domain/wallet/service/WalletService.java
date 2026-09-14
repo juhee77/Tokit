@@ -11,12 +11,54 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
 
+import com.tokit.domain.wallet.dto.WalletSummaryResponse;
+import java.util.List;
+
 @Service
 @RequiredArgsConstructor
 public class WalletService {
 
     private final WalletRepository walletRepository;
     private final UserRepository userRepository;
+
+    @Transactional(readOnly = true)
+    public WalletSummaryResponse getWalletSummary(Long userId) {
+        userRepository.findById(userId)
+                .orElseThrow(() -> new IllegalArgumentException("존재하지 않는 유저입니다."));
+
+        List<Wallet> wallets = walletRepository.findAllByUserId(userId);
+
+        BigDecimal krwBalance = BigDecimal.ZERO;
+        BigDecimal krwLockedBalance = BigDecimal.ZERO;
+        BigDecimal totalAssetValuation = BigDecimal.ZERO;
+        int assetCount = 0;
+
+        for (Wallet wallet : wallets) {
+            if (wallet.getAsset() == null) {
+                krwBalance = wallet.getBalance();
+                krwLockedBalance = wallet.getLockedBalance();
+            } else {
+                assetCount++;
+                BigDecimal totalQty = wallet.getBalance().add(wallet.getLockedBalance());
+                BigDecimal issuePrice = wallet.getAsset().getIssuePrice() != null
+                        ? wallet.getAsset().getIssuePrice()
+                        : BigDecimal.ZERO;
+                totalAssetValuation = totalAssetValuation.add(totalQty.multiply(issuePrice));
+            }
+        }
+
+        BigDecimal totalPortfolioValue = krwBalance.add(krwLockedBalance).add(totalAssetValuation);
+        List<WalletResponse> walletResponses = wallets.stream().map(WalletResponse::from).toList();
+
+        return new WalletSummaryResponse(
+                userId,
+                krwBalance,
+                krwLockedBalance,
+                totalPortfolioValue,
+                assetCount,
+                walletResponses
+        );
+    }
 
     @Transactional
     public WalletResponse depositKrw(Long userId, BigDecimal amount) {

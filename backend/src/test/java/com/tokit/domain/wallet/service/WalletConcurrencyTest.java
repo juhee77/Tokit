@@ -41,7 +41,8 @@ class WalletConcurrencyTest {
                 .name("Test User")
                 .email("test.concurrency-" + uniqueId + "@tokit.com")
                 .walletAddress("0xCONCURRENCY_TEST-" + uniqueId.substring(0, 10))
-                .kycStatus(true)
+                .password("{noop}test-password")
+                    .kycStatus(true)
                 .build());
 
         walletRepository.save(Wallet.builder()

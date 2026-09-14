@@ -22,8 +22,9 @@ import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.http.MediaType;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
+import com.tokit.global.exception.GlobalExceptionHandler;
+import com.tokit.support.TestAuthPrincipalResolver;
 import org.springframework.transaction.annotation.Transactional;
-import org.springframework.web.context.WebApplicationContext;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
@@ -40,8 +41,9 @@ class MyPageIntegrationTest {
 
     private MockMvc mockMvc;
 
+    // 컨텍스트에서 가져온 컨트롤러 빈이므로 AOP/프록시는 그대로 살아 있고, 인증 주체만 주입합니다.
     @Autowired
-    private WebApplicationContext webApplicationContext;
+    private MyPageController myPageController;
 
     @Autowired
     private UserRepository userRepository;
@@ -68,13 +70,13 @@ class MyPageIntegrationTest {
 
     @BeforeEach
     void setUp() {
-        mockMvc = MockMvcBuilders.webAppContextSetup(webApplicationContext).build();
 
         // Setup User
         testUser = userRepository.save(User.builder()
                 .name("Gildong Hong")
                 .email("gildong@tokit.com")
                 .walletAddress("0xGildongAddress")
+                .password("{noop}test-password")
                 .kycStatus(true)
                 .build());
 
@@ -82,6 +84,7 @@ class MyPageIntegrationTest {
                 .name("Cheolsu Kim")
                 .email("cheolsu@tokit.com")
                 .walletAddress("0xCheolsuAddress")
+                .password("{noop}test-password")
                 .kycStatus(true)
                 .build());
 
@@ -149,12 +152,20 @@ class MyPageIntegrationTest {
                 .quantity(BigDecimal.valueOf(5))
                 .tradedAt(LocalDateTime.now())
                 .build());
+
+        // 인증 주체는 실제 저장된 testUser로 고정합니다. (JWT 필터를 태우지 않는 대신
+        // 컨트롤러의 @AuthenticationPrincipal만 테스트용으로 채웁니다)
+        mockMvc = MockMvcBuilders.standaloneSetup(myPageController)
+                .setCustomArgumentResolvers(
+                        new TestAuthPrincipalResolver(testUser.getId(), testUser.getEmail()))
+                .setControllerAdvice(new GlobalExceptionHandler())
+                .build();
     }
 
     @Test
     @DisplayName("마이페이지 통합 조회: 사용자의 프로필, 지갑 목록, 주문 내역, 체결 내역을 일괄 반환한다.")
     void getMyPage() throws Exception {
-        mockMvc.perform(get("/api/users/" + testUser.getId() + "/mypage")
+        mockMvc.perform(get("/api/users/me/mypage")
                         .contentType(MediaType.APPLICATION_JSON))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.status", is(200)))

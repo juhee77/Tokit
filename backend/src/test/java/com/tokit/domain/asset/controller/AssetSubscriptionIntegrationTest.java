@@ -18,8 +18,9 @@ import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.http.MediaType;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
+import com.tokit.global.exception.GlobalExceptionHandler;
+import com.tokit.support.TestAuthPrincipalResolver;
 import org.springframework.transaction.annotation.Transactional;
-import org.springframework.web.context.WebApplicationContext;
 
 import java.math.BigDecimal;
 
@@ -36,8 +37,9 @@ class AssetSubscriptionIntegrationTest {
 
     private MockMvc mockMvc;
 
+    // 컨텍스트에서 가져온 컨트롤러 빈이므로 AOP/프록시는 그대로 살아 있고, 인증 주체만 주입합니다.
     @Autowired
-    private WebApplicationContext webApplicationContext;
+    private AssetController assetController;
 
     @Autowired
     private UserRepository userRepository;
@@ -60,7 +62,6 @@ class AssetSubscriptionIntegrationTest {
 
     @BeforeEach
     void setUp() {
-        mockMvc = MockMvcBuilders.webAppContextSetup(webApplicationContext).build();
 
         // 1. 테스트 유저 생성 (완벽한 테스트 격리를 위해 고유 이메일 사용)
         testUser = userRepository.findByEmail("test-investor-sub-unique@tokit.com")
@@ -72,6 +73,7 @@ class AssetSubscriptionIntegrationTest {
                         .name("김토킷")
                         .email("test-investor-sub-unique@tokit.com")
                         .walletAddress("0x70997970C51812dc3A010C7d01b50e0d17dc79C8")
+                        .password("{noop}test-password")
                         .kycStatus(true)
                         .build()));
 
@@ -111,6 +113,14 @@ class AssetSubscriptionIntegrationTest {
                     w.updateBalance(BigDecimal.ZERO, BigDecimal.ZERO);
                     walletRepository.save(w);
                 });
+
+        // 인증 주체는 실제 저장된 testUser로 고정합니다. (JWT 필터를 태우지 않는 대신
+        // 컨트롤러의 @AuthenticationPrincipal만 테스트용으로 채웁니다)
+        mockMvc = MockMvcBuilders.standaloneSetup(assetController)
+                .setCustomArgumentResolvers(
+                        new TestAuthPrincipalResolver(testUser.getId(), testUser.getEmail()))
+                .setControllerAdvice(new GlobalExceptionHandler())
+                .build();
     }
 
     @Test
@@ -119,12 +129,14 @@ class AssetSubscriptionIntegrationTest {
         // given
         String requestBody = "{\"userId\":" + testUser.getId() + ",\"amount\":200000}"; // 200,000원 투자 (20토큰 배정 예상)
         
+        // 멱등성 키는 매 실행마다 새로 생성합니다. 고정 문자열을 쓰면 @Idempotent가 Redis에
+        // 남긴 키(TTL 120초) 때문에 2분 내 재실행 시 중복 요청으로 차단됩니다.
         // blockchain transfer 모킹
         doNothing().when(contractService).handleTransferByPartition(any(), any(), any(), any(), any());
 
         // when & then
         mockMvc.perform(post("/api/assets/TEST-GNPM/subscribe")
-                        .header("X-Idempotency-Key", "idempotency-key-uuid-1234")
+                        .header("X-Idempotency-Key", java.util.UUID.randomUUID().toString())
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(requestBody))
                 .andExpect(status().isOk());
@@ -158,7 +170,7 @@ class AssetSubscriptionIntegrationTest {
 
         // when & then
         mockMvc.perform(post("/api/assets/TEST-GNPM/subscribe")
-                        .header("X-Idempotency-Key", "idempotency-key-uuid-1235")
+                        .header("X-Idempotency-Key", java.util.UUID.randomUUID().toString())
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(requestBody))
                 .andExpect(status().isBadRequest());
@@ -172,7 +184,7 @@ class AssetSubscriptionIntegrationTest {
 
         // when & then
         mockMvc.perform(post("/api/assets/TEST-GNPM/subscribe")
-                        .header("X-Idempotency-Key", "idempotency-key-uuid-1236")
+                        .header("X-Idempotency-Key", java.util.UUID.randomUUID().toString())
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(requestBody))
                 .andExpect(status().isBadRequest());
@@ -190,7 +202,7 @@ class AssetSubscriptionIntegrationTest {
 
         // when & then
         mockMvc.perform(post("/api/assets/TEST-GNPM/subscribe")
-                        .header("X-Idempotency-Key", "idempotency-key-uuid-1237")
+                        .header("X-Idempotency-Key", java.util.UUID.randomUUID().toString())
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(requestBody))
                 .andExpect(status().isBadRequest());

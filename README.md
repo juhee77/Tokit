@@ -1,9 +1,11 @@
-# 🏛️ TOKIT — STO 토큰증권 초고속 매칭 엔진 & 거래소 플랫폼
+# 🏛️ TOKIT — STO 토큰증권 매칭 엔진 & 거래소 플랫폼
 
-> **대규모 금융 트래픽 분산 처리**와 **0.1원의 오차도 허용하지 않는 강력한 데이터 정합성**을 보장하는 고성능 토큰증권(STO) 거래 플랫폼의 엔터프라이즈 레퍼런스 모델입니다.
+> 호가 매칭·정산·온체인 결산을 다루는 토큰증권(STO) 거래 플랫폼입니다.
+> **동시 주문 상황에서 원화와 토큰의 총량이 보존되는가**를 이 프로젝트의 제1 기준으로 삼고,
+> 그 불변식을 자동 테스트로 검증합니다.
 
-[![Backend Tests](https://img.shields.io/badge/Backend%20Tests-118%2F118%20PASSED-brightgreen.svg)]()
-[![Coverage](https://img.shields.io/badge/Test%20Coverage-100%25%20Build%20Success-blue.svg)]()
+[![Backend Tests](https://img.shields.io/badge/Backend%20Tests-194%20passing-brightgreen.svg)]()
+[![Integration](https://img.shields.io/badge/Integration%20%26%20Concurrency-5%20suites%20enabled-blue.svg)]()
 
 
 ---
@@ -11,14 +13,14 @@
 ## 🎯 1. 프로젝트 비전 및 기술적 지향점 (Core Vision)
 
 ### 💡 기술적 당면 과제 (Core Engineering Goal)
-- **트랜잭션 동시성 제어**: DB 데드락(Deadlock) 및 핫스팟(Hotspot)을 최소화하는 효율적인 분산 배타 락 적용.
-- **초고속 매칭 처리**: 인메모리(Redis)를 응용한 대규모 거래 매칭 알고리즘 구현.
+- **매칭 경합 제어**: 매칭은 "활성 주문 조회 → 체결 수량 계산 → 잔량 갱신"의 read-modify-write이므로, 종목(Asset) 행에 `PESSIMISTIC_WRITE` 락을 잡아 같은 종목의 매칭을 직렬화. 락 단위가 종목이라 서로 다른 종목은 그대로 병렬 처리됩니다. ([해결 과정 →](#-5-동시성-문제-해결-과정-concurrency-deep-dive))
+- **주문 매칭 파이프라인**: 주문 접수는 REST로 받되 매칭은 RabbitMQ 컨슈머에서 비동기로 처리해 API 응답과 체결 연산을 분리. 체결된 호가창 스냅샷은 Redis에 캐시하고 STOMP로 브로드캐스트합니다.
 - **실시간 비차단 데이터 스트리밍**: 클라이언트(Next.js) 렌더링 오버헤드를 제어하는 최적화된 SSE/WebSocket 스트림 채널 구축.
 - **온-오프체인 정합성 보장**: PostgreSQL 오프체인 잔고 데이터와 블록체인(Hardhat Solidity) 온체인 스마트 컨트랙트 간의 일일 상시 대사(Reconciliation) 파이프라인 수립.
-- **대용량 배당 분배 엔진**: Spring Batch 5 및 비관적 락(Pessimistic Lock) 기반으로 수만 명의 STO 주주에게 지분 비율대로 KRW 예치금을 오차(소수점 첫째 자리 절사) 없이 배분하는 대량 결산 배치 아키텍처 수립.
+- **대용량 배당 분배 엔진**: Spring Batch 5 및 비관적 락(Pessimistic Lock) 기반으로 다수의 STO 주주에게 지분 비율대로 KRW 예치금을 오차(소수점 첫째 자리 절사) 없이 배분하는 대량 결산 배치 아키텍처 수립.
 
 ### 💼 비즈니스 아키텍처 (Business Value)
-고가의 실물 자산(예: 상업용 부동산, 미술품 등)을 신탁하여 수익증권을 발행하고, 이를 블록체인 기반의 토큰으로 분할 발행(STO)하여 다수의 투자자가 안전하게 공모 청약 및 2차 거래(호가 매칭)를 할 수 있도록 지원하는 초고속 결제 및 매칭 인프라입니다.
+고가의 실물 자산(예: 상업용 부동산, 미술품 등)을 신탁하여 수익증권을 발행하고, 이를 블록체인 기반의 토큰으로 분할 발행(STO)하여 다수의 투자자가 안전하게 공모 청약 및 2차 거래(호가 매칭)를 할 수 있도록 지원하는 결제 및 매칭 인프라입니다.
 
 ### 🔗 블록체인 코어 (ERC-1400 STO Standard)
 본 프로젝트는 단순한 데이터베이스 거래소가 아닙니다. 최종 자산의 소유권 증명은 규제 준수형 STO 표준인 **ERC-1400 스마트 컨트랙트**를 통해 관리됩니다.
@@ -60,9 +62,9 @@
 | 레이어 | 기술 스택 | 핵심 역할 및 책임 (R&R) |
 | :--- | :--- | :--- |
 | **Frontend** | Next.js 16 (App Router), TS, Tailwind, Zustand | **"Dumb Client"**. 가공되지 않은 상태(State)의 렌더링에만 집중하며, 중복 클릭 방지 등 클라이언트 측 멱등성 UI를 구현합니다. |
-| **Backend** | Java 25 (LTS), Spring Boot 4.0, JPA, WebSocket | **"The Brain"**. 비즈니스 로직 제어, 트랜잭션 격리수준 관리, 인메모리 매칭 엔진 구동 및 실시간 데이터 푸시를 비차단(Non-blocking)으로 수행합니다. |
+| **Backend** | Java 25 (LTS), Spring Boot 4.0, JPA, WebSocket | **"The Brain"**. 비즈니스 로직 제어, 트랜잭션 경계 및 락 관리, 매칭 엔진 구동, 실시간 데이터 푸시를 담당합니다. |
 | **Database** | PostgreSQL 17 | **"Source of Truth"**. 모든 자산 거래 원장(Ledger)과 회원 정보가 엄격한 무결성 하에 보존되는 유일한 물리 저장소입니다. |
-| **Cache & MQ** | Redis 7, RabbitMQ 4 | **"Shock Absorber"**. 초당 수만 건의 트래픽 스파이크를 흡수하고, 매칭 파이프라인의 결합도를 낮추는 버퍼 역할을 담당합니다. |
+| **Cache & MQ** | Redis 7, RabbitMQ 4 | **"Shock Absorber"**. 주문 접수와 매칭 연산을 큐로 분리해 결합도를 낮추고, 호가창 스냅샷을 캐시해 조회 부하를 흡수합니다. |
 | **Blockchain** | Hardhat, Solidity 0.8.28 (ERC-1400) | **"Final Ledger"**. 오프체인의 비동기 온체인 동기화 워커에 의해 호출되며, 화이트리스트 및 파티션 전송을 통해 법적 컴플라이언스를 최종 보장합니다. |
 
 ---
@@ -102,7 +104,7 @@ sequenceDiagram
     participant BC as 블록체인 (Hardhat Node)
 
     User->>FE: 마이페이지 접속
-    FE->>BE: GET /api/users/{id}/mypage
+    FE->>BE: GET /api/users/me/mypage
     BE-->>FE: 회원 정보 및 지갑 잔고 반환 (미가입 시 자동 가입)
     User->>FE: KYC인증 토글 클릭
     FE->>BE: PUT /api/users/{id}/kyc?kycStatus=true
@@ -208,27 +210,114 @@ sequenceDiagram
 ```
 - **0.1원의 오차 없는 신뢰 보장**: 매 영업일 정해진 스케줄러에 따라 오프체인 RDBMS 잔액과 블록체인 온체인 컨트랙트 원장을 상호 대조하며, 불일치가 발견되면 즉시 관리자 채널에 긴급 알림을 전송하여 온-오프체인 데이터 싱크 무결성을 유지합니다.
 
-- **실시간 비차단 결합**: 거래소 화면 진입 시 STOMP WebSocket (`ws-tokit`) 채널과 SSE (`/api/trades/subscribe/{symbol}`)를 동시 구독하여, 초고속 오프체인 매칭 엔진에서 연산된 체결 및 호가 정보를 화면에 실시간으로 반영합니다.
+- **실시간 비차단 결합**: 거래소 화면 진입 시 STOMP WebSocket (`ws-tokit`) 채널과 SSE (`/api/trades/subscribe/{symbol}`)를 동시 구독하여, 오프체인 매칭 엔진에서 연산된 체결 및 호가 정보를 화면에 실시간으로 반영합니다.
 
 ---
 
-## 📊 5. 프로젝트 개발 현황 (PM 개발 진척도)
+## 🔍 5. 동시성 문제 해결 과정 (Concurrency Deep Dive)
 
-현재 플랫폼의 비즈니스 기능 및 기술 레이어별 개발 완료율은 평균 **97%** 수준으로, 실거래 시뮬레이션 및 부하 테스트가 가능한 상태입니다. 
+> 이 프로젝트에서 가장 깊게 판 문제입니다. **"안전해 보였지만 실은 안전하지 않았던"** 매칭 엔진을
+> 테스트로 무너뜨리고 고친 과정을 기록합니다.
 
-자세한 로드맵, 컴포넌트별 세부 상태 및 검증 결과는 [PM 개발 진척도 보고서](file:///Users/juhee/.gemini/antigravity-ide/brain/e8203c14-2c0a-40a2-9d0d-43181b7ba097/pm_progress_report.md) 문서를 통해 확인하실 수 있습니다.
+### 1) 발견: 안전성이 코드가 아니라 배포 형태에 의존하고 있었다
 
-### 핵심 기능 구현 상태 요약
-- **ERC-1400 온체인 규제 (95%)**: KYC 상태 변경에 따른 스마트 컨트랙트 화이트리스트 자동 동기화.
-- **예치금 멱등성 및 동시성 (100%)**: Redis 분산 락 및 PostgreSQL 비관적 락을 결합해 0.1원의 오차 없는 안전한 이중 결제 방지 구현.
-- **공모 청약 모듈 (100%)**: 자산 모집 실시간 달성률 표시, 최소 청약 금액 유효성 필터링 및 청약 완료 후 즉시 온체인 자산 배정.
-- **실시간 호가 및 체결 거래소 (90%)**: STOMP WebSocket 호가판 및 SSE 체결 내역 결합 완료.
-- **매칭 엔진 동시성 고하중 검증 (100%)**: 다중 스레드 하의 비동기 RabbitMQ 매칭 시 proxy 지연로딩 예외 극복 및 정합성 테스트 성공.
-- **배당금 자동 계산 및 지급 배치 엔진 (100%)**: Spring Batch 5 Chunk 지향 처리를 통한 대용량 주주 지분 배당 분배, 비관적 락을 통한 예치금 증액 정합성 확보 및 어드민 대시보드 UI 연동 완료.
+매칭은 `MatchingService.matchOrder()`에서 **활성 주문 조회 → 체결 수량 계산 → 잔량 갱신** 순으로
+진행되는 전형적인 read-modify-write입니다. 그런데 이 구간에 어떤 배타 제어도 없었습니다.
+
+그럼에도 동시성 테스트가 통과했던 이유는 `spring.rabbitmq.listener.simple.concurrency`의
+**기본값이 1**이라, 큐 컨슈머 한 개가 매칭을 암묵적으로 직렬화하고 있었기 때문입니다.
+즉 정합성이 락이 아니라 **"컨슈머가 하나뿐"이라는 배포 형태**에 기대고 있었고,
+컨슈머를 늘리거나 인스턴스를 다중화하는 순간 무너지는 구조였습니다.
+
+### 2) 재현: 애플리케이션 코드는 그대로 두고 가정만 깬다
+
+[`MatchingRaceConditionTest`](backend/src/test/java/com/tokit/domain/matching/service/MatchingRaceConditionTest.java)는
+리스너 동시성만 8로 올려 그 가정을 무너뜨립니다. 시나리오는 단순합니다.
+
+- 매도자 1명이 시장의 **전체 공급량 10토큰**을 보유하고 매도 주문 1건을 낸다
+- 매수자 10명이 **동시에** 매수 주문을 제출한다 (수요 ≫ 공급)
+
+검증하는 것은 특정 시나리오가 아니라 **불변식**입니다.
+
+| 불변식 | 락 없음 | 락 적용 |
+| :--- | ---: | ---: |
+| 체결 총량 (≤ 공급량 10) | **80 토큰** | 10 토큰 |
+| 매도자 홀딩 잔고 (≥ 0) | **−70** | 0 |
+| 지갑 토큰 총량 보존 | 깨짐 | 유지 |
+
+**공급량이 10개인데 80개가 팔렸습니다.** 8배는 우연이 아닙니다 — 컨슈머 스레드 8개가 각각
+같은 매도 주문을 중복 체결한 결과로, 동시성 설정값과 정확히 일치합니다.
+존재하지 않는 토큰 70개가 시장에 생겨난 것입니다.
+
+### 3) 해결: 왜 Redis 분산 락이 아니라 DB 행 락인가
+
+```java
+// MatchingService.matchOrder() 진입부
+assetRepository.findBySymbolForUpdate(incomingOrder.getAssetSymbol())
+```
+
+종목(Asset) 행에 `PESSIMISTIC_WRITE` 락을 잡아 **같은 종목의 매칭만** 직렬화합니다.
+
+애플리케이션 레벨 락(Redis 등)을 쓰지 않은 이유는 **락의 수명** 때문입니다.
+애플리케이션 락은 메서드가 끝날 때 해제되는데 그 시점은 **트랜잭션 커밋 이전**입니다.
+락을 놓은 직후 다른 스레드가 아직 커밋되지 않은 잔량을 읽는 창이 남습니다.
+DB 행 락은 수명이 커밋 시점과 정확히 일치하므로 그 창이 존재하지 않습니다.
+
+락 단위가 종목이므로 **서로 다른 종목의 매칭은 그대로 병렬**로 진행됩니다.
+
+### 4) 부수 효과로 드러난 것들
+
+락을 넣자 전체 실행에서 테스트 2개가 깨졌고, 그 과정에서 두 가지가 추가로 드러났습니다.
+
+- **주문이 조용히 유실됩니다.** `OrderEventConsumer`가 예외를 `catch` 후 로그만 남겨,
+  메시지는 ACK되고 주문은 영원히 매칭되지 않습니다. DLQ가 없습니다. *(미해결 — 개선 과제)*
+- **테스트 격리 부채.** 리스너 동시성을 올린 전용 컨텍스트가 캐시에 남으면 그 컨슈머들이
+  이후 테스트의 durable 큐 메시지까지 소비합니다. `@DirtiesContext`와 큐 purge로 차단했습니다.
+
+### 5) 알려진 한계 (Known Limitations)
+
+과장 없이 현재 구조의 한계를 명시합니다.
+
+- **매칭 자료구조는 아직 DB 기반입니다.** 주문 1건마다 해당 종목의 활성 주문을 전량 조회해
+  Java에서 정렬·필터링하며, `orders` 테이블에는 아직 인덱스가 없습니다. Redis는 체결 후
+  호가창 스냅샷 캐시로만 쓰입니다. 진정한 인메모리 오더북(Redis ZSET 또는 `TreeMap` 기반
+  단일 스레드 매칭)은 향후 과제입니다.
+- **처리량(TPS)은 아직 측정 전입니다.** 측정 없이 성능을 주장하지 않습니다.
+- **온체인 동기화는 로컬 Hardhat 노드 기준**이며, 퍼블릭 네트워크 수수료·재조직(reorg)
+  대응은 범위 밖입니다.
 
 ---
 
-## 🚀 6. Quick Start
+## 📊 6. 프로젝트 개발 현황 (Development Status)
+
+백분율 완료율 대신, **무엇이 어디까지 검증되었는지**를 기준으로 기술합니다.
+"구현됨"과 "테스트로 검증됨"은 다른 상태이기 때문입니다.
+
+### 구현 + 자동 테스트로 검증됨
+- **매칭 경합 제어**: 종목 행 배타 락으로 중복 체결 차단. 락 없이는 공급량 10토큰에 80토큰이
+  체결되는 것을 재현하는 회귀 테스트 보유. ([상세 →](#-5-동시성-문제-해결-과정-concurrency-deep-dive))
+- **예치금 동시성**: 지갑 잔고에 `PESSIMISTIC_WRITE` 락 적용. 100건 동시 충전 시 잔고 합산
+  정확성을 검증하는 `WalletConcurrencyTest` 보유.
+- **결제 멱등성**: `X-Idempotency-Key` + Redis `SETNX` 기반 중복 차단. 동일 키 동시 10회 요청 시
+  1건만 성공하고 나머지는 409를 반환함을 통합 테스트로 검증.
+- **수수료 원장 정합성**: 0.1% 편도 수수료 적용 후에도 *지갑 잔고 총합 + 수수료 원장 총합 =
+  최초 투입 원화*가 성립함을 검증.
+- **공모 청약**: 잔액 부족·KYC 미인증·일반투자자 한도 초과 거절 경로를 통합 테스트로 검증.
+
+### 구현되었으나 자동 테스트 미비
+- **ERC-1400 온체인 규제**: KYC 상태 변경 시 화이트리스트 동기화가 동작하나,
+  **스마트 컨트랙트 자체의 테스트 코드가 없습니다.**
+- **배당 분배 배치**: Spring Batch 5 Chunk 기반 구현 완료. 대량 데이터 부하 검증은 미실시.
+- **실시간 호가/체결 스트리밍**: STOMP·SSE 연동 완료. 다중 구독자 부하 검증은 미실시.
+
+### 미해결 과제
+- **주문 유실 방지**: `OrderEventConsumer`의 예외 삼킴으로 매칭 실패 시 주문이 조용히 사라집니다.
+  DLQ 및 재시도 도입 필요.
+- **성능 측정**: TPS·지연시간 측정 및 `orders` 테이블 인덱스 설계 미실시.
+
+---
+
+## 🚀 7. Quick Start
 
 ### Prerequisites
 - Java 25 (LTS)
@@ -239,7 +328,7 @@ sequenceDiagram
 ```bash
 docker compose up -d
 ```
-자세한 Docker 설치, 모니터링 및 트러블슈팅 가이드는 [Docker 인프라 구축 및 가이드북](file:///Users/juhee/IdeaProjects/TOKIT/docs/docker_setup.md) 문서를 참고하십시오.
+자세한 Docker 설치, 모니터링 및 트러블슈팅 가이드는 [Docker 인프라 구축 및 가이드북](docs/docker_setup.md) 문서를 참고하십시오.
 
 ### 2. Backend 실행
 ```bash
@@ -250,7 +339,27 @@ cd backend
 > 서버: http://localhost:8080
 > Swagger API 문서: http://localhost:8080/swagger-ui/index.html
 
-### 3. Frontend 실행
+### 3. 테스트 실행
+
+통합·동시성 테스트가 실제 PostgreSQL / Redis / RabbitMQ를 사용하므로,
+**위 1단계의 인프라가 기동된 상태**여야 합니다.
+
+```bash
+cd backend
+./gradlew test
+```
+
+- 총 **194개** 테스트가 실행되며, 제외(exclude)되는 테스트는 없습니다.
+- 매칭 경합 재현 테스트만 따로 돌리려면:
+
+```bash
+./gradlew test --tests '*MatchingRaceConditionTest'
+```
+
+> 이 테스트가 **왜 의미 있는지**는 [5. 동시성 문제 해결 과정](#-5-동시성-문제-해결-과정-concurrency-deep-dive)을 참고하십시오.
+> `MatchingService`의 종목 락을 제거하면 이 테스트는 실패합니다.
+
+### 4. Frontend 실행
 ```bash
 cd frontend
 npm install
@@ -258,7 +367,7 @@ npm run dev
 ```
 > 클라이언트: http://localhost:3000
 
-### 4. Blockchain 로컬 노드 기동
+### 5. Blockchain 로컬 노드 기동
 ```bash
 cd blockchain
 npm install

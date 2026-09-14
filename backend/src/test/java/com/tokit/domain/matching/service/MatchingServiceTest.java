@@ -1,6 +1,7 @@
 package com.tokit.domain.matching.service;
 
 import com.tokit.domain.asset.entity.Asset;
+import com.tokit.domain.asset.repository.AssetRepository;
 import com.tokit.domain.matching.engine.MatchResult;
 import com.tokit.domain.matching.engine.MatchingEngine;
 import com.tokit.domain.order.entity.Order;
@@ -25,6 +26,8 @@ import java.util.List;
 
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
+import java.util.Optional;
+
 import static org.mockito.Mockito.*;
 
 @ExtendWith(MockitoExtension.class)
@@ -32,6 +35,9 @@ class MatchingServiceTest {
 
     @InjectMocks
     private MatchingService matchingService;
+
+    @Mock
+    private AssetRepository assetRepository;
 
     @Mock
     private OrderRepository orderRepository;
@@ -113,6 +119,7 @@ class MatchingServiceTest {
     @DisplayName("matchOrder: 매수 주문 매칭 성공 시 체결 내역 저장, DB 업데이트, STOMP 호가창 브로드캐스트가 연동 실행된다.")
     void matchOrder_ExecutesTradeAndBroadcastsOrderBook() {
         // Given
+        when(assetRepository.findBySymbolForUpdate("PANGYO-STO")).thenReturn(Optional.of(testAsset));
         when(orderRepository.findByAsset_SymbolAndStatusIn(eq("PANGYO-STO"), any()))
                 .thenReturn(List.of(sellOrder));
 

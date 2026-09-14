@@ -116,4 +116,40 @@ class WalletServiceTest {
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("출금 가능 잔고가 부족합니다.");
     }
+
+    @Test
+    @DisplayName("getWalletSummary: 유저의 원화 예치금 및 보유 토큰증권 자산 평가액 합산 정보(종합 포트폴리오)를 반환한다.")
+    void getWalletSummary_Success() throws Exception {
+        // Given
+        com.tokit.domain.asset.entity.Asset asset = com.tokit.domain.asset.entity.Asset.builder()
+                .name("Gangnam STO")
+                .symbol("GANGNAM-STO")
+                .issuePrice(new BigDecimal("10000"))
+                .build();
+        setField(asset, "id", 1L);
+
+        Wallet tokenWallet = Wallet.builder()
+                .user(testUser)
+                .asset(asset)
+                .balance(new BigDecimal("10")) // 10 * 10,000 = 100,000원
+                .lockedBalance(new BigDecimal("5")) // 5 * 10,000 = 50,000원
+                .build();
+        setField(tokenWallet, "id", 11L);
+
+        when(userRepository.findById(100L)).thenReturn(Optional.of(testUser));
+        when(walletRepository.findAllByUserId(100L)).thenReturn(java.util.List.of(testKrwWallet, tokenWallet));
+
+        // When
+        com.tokit.domain.wallet.dto.WalletSummaryResponse summary = walletService.getWalletSummary(100L);
+
+        // Then
+        // KRW 잔액: 500,000, 락: 0
+        // 토큰 평가액: 15주 * 10,000원 = 150,000원
+        // 총 포트폴리오 평가액: 650,000원
+        assertThat(summary).isNotNull();
+        assertThat(summary.krwBalance().stripTrailingZeros()).isEqualTo(new BigDecimal("500000").stripTrailingZeros());
+        assertThat(summary.totalPortfolioValue().stripTrailingZeros()).isEqualTo(new BigDecimal("650000").stripTrailingZeros());
+        assertThat(summary.totalAssetCount()).isEqualTo(1);
+        assertThat(summary.wallets()).hasSize(2);
+    }
 }

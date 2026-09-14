@@ -5,6 +5,8 @@ import com.tokit.domain.user.entity.User;
 import com.tokit.domain.user.repository.UserRepository;
 import com.tokit.domain.wallet.entity.Wallet;
 import com.tokit.domain.wallet.repository.WalletRepository;
+import com.tokit.global.exception.GlobalExceptionHandler;
+import com.tokit.support.TestAuthPrincipalResolver;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -15,7 +17,6 @@ import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.http.MediaType;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
-import org.springframework.web.context.WebApplicationContext;
 
 import java.math.BigDecimal;
 import java.util.UUID;
@@ -32,8 +33,10 @@ class IdempotencyIntegrationTest {
 
     private MockMvc mockMvc;
 
+    // 컨텍스트에서 가져온 컨트롤러는 @Idempotent AOP 프록시이므로, standaloneSetup으로 감싸도
+    // 멱등성 애스펙트는 그대로 동작합니다. 인증 주체만 테스트용으로 주입합니다.
     @Autowired
-    private WebApplicationContext webApplicationContext;
+    private WalletController walletController;
 
     @Autowired
     private ObjectMapper objectMapper;
@@ -51,7 +54,6 @@ class IdempotencyIntegrationTest {
 
     @BeforeEach
     void setUp() {
-        mockMvc = MockMvcBuilders.webAppContextSetup(webApplicationContext).build();
         walletRepository.deleteAll();
         redisTemplate.getConnectionFactory().getConnection().serverCommands().flushAll();
 
@@ -60,6 +62,7 @@ class IdempotencyIntegrationTest {
                 .name("Idempotent User")
                 .email("idempotent-" + uniqueId + "@tokit.com")
                 .walletAddress("0xIDEMPOTENT-" + uniqueId.substring(0, 10))
+                .password("{noop}test-password")
                 .kycStatus(true)
                 .build());
 
@@ -69,6 +72,12 @@ class IdempotencyIntegrationTest {
                 .balance(BigDecimal.ZERO)
                 .lockedBalance(BigDecimal.ZERO)
                 .build());
+
+        mockMvc = MockMvcBuilders.standaloneSetup(walletController)
+                .setCustomArgumentResolvers(
+                        new TestAuthPrincipalResolver(testUser.getId(), testUser.getEmail()))
+                .setControllerAdvice(new GlobalExceptionHandler())
+                .build();
     }
 
     @AfterEach

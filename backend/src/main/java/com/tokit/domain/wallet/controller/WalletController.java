@@ -17,6 +17,8 @@ import org.springframework.web.bind.annotation.*;
 
 import java.math.BigDecimal;
 
+import com.tokit.domain.wallet.dto.WalletSummaryResponse;
+
 @Tag(name = "03. Wallet (지갑)", description = "사용자 지갑(예치금 및 자산) 관리 API")
 @RestController
 @RequestMapping("/api/wallets")
@@ -24,6 +26,15 @@ import java.math.BigDecimal;
 public class WalletController {
 
     private final WalletService walletService;
+
+    @GetMapping("/summary")
+    @Operation(summary = "지갑 포트폴리오 요약 조회", description = "로그인한 사용자의 원화 예치금, 토큰증권 보유 자산 평가액 및 종합 포트폴리오 정보를 조회합니다.")
+    public ResponseEntity<ApiResponse<WalletSummaryResponse>> getWalletSummary(
+            @AuthenticationPrincipal AuthUser authUser
+    ) {
+        WalletSummaryResponse response = walletService.getWalletSummary(authUser.id());
+        return ResponseEntity.ok(ApiResponse.success(response));
+    }
 
     public record WalletAmountRequest(
             @NotNull(message = "금액은 필수입니다.")

@@ -25,6 +25,8 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+
 @ExtendWith(MockitoExtension.class)
 class WalletControllerTest {
 
@@ -103,5 +105,29 @@ class WalletControllerTest {
                         .content(objectMapper.writeValueAsString(request)))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.status").value(200));
+    }
+
+    @Test
+    @DisplayName("GET /api/wallets/summary: 포트폴리오 요약 조회 성공 시 HTTP 200과 지갑 요약 데이터를 반환한다.")
+    void getWalletSummary_Success() throws Exception {
+        // Given
+        com.tokit.domain.wallet.dto.WalletSummaryResponse summaryResponse = new com.tokit.domain.wallet.dto.WalletSummaryResponse(
+                1L,
+                new BigDecimal("500000"),
+                BigDecimal.ZERO,
+                new BigDecimal("650000"),
+                1,
+                java.util.List.of(mockWalletResponse)
+        );
+
+        when(walletService.getWalletSummary(1L)).thenReturn(summaryResponse);
+
+        // When & Then
+        mockMvc.perform(get("/api/wallets/summary"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.status").value(200))
+                .andExpect(jsonPath("$.data.krwBalance").value(500000))
+                .andExpect(jsonPath("$.data.totalPortfolioValue").value(650000))
+                .andExpect(jsonPath("$.data.totalAssetCount").value(1));
     }
 }

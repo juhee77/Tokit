@@ -12,4 +12,31 @@ public record OrderBookDto(
         BigDecimal price,
         BigDecimal quantity
     ) {}
+
+    public BigDecimal calculateSpread() {
+        if (bids == null || bids.isEmpty() || asks == null || asks.isEmpty()) {
+            return BigDecimal.ZERO;
+        }
+        BigDecimal highestBid = bids.get(0).price();
+        BigDecimal lowestAsk = asks.get(0).price();
+        return lowestAsk.subtract(highestBid).max(BigDecimal.ZERO);
+    }
+
+    public BigDecimal calculateTotalBidVolume() {
+        if (bids == null || bids.isEmpty()) {
+            return BigDecimal.ZERO;
+        }
+        return bids.stream()
+                .map(OrderBookEntry::quantity)
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
+    }
+
+    public BigDecimal calculateTotalAskVolume() {
+        if (asks == null || asks.isEmpty()) {
+            return BigDecimal.ZERO;
+        }
+        return asks.stream()
+                .map(OrderBookEntry::quantity)
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
+    }
 }

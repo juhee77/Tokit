@@ -1,6 +1,7 @@
 package com.tokit.domain.matching.service;
 
 import com.tokit.domain.matching.engine.MatchResult;
+import com.tokit.domain.asset.repository.AssetRepository;
 import com.tokit.domain.matching.engine.MatchingEngine;
 import com.tokit.domain.order.entity.Order;
 import com.tokit.domain.order.entity.OrderStatus;
@@ -27,6 +28,7 @@ import java.util.stream.Collectors;
 @Slf4j
 public class MatchingService {
 
+    private final AssetRepository assetRepository;
     private final OrderRepository orderRepository;
     private final MatchingEngine matchingEngine;
     private final TradeService tradeService;
@@ -36,6 +38,13 @@ public class MatchingService {
     @Transactional
     public void matchOrder(Order incomingOrder) {
         log.info("Starting match process for order id: {}, symbol: {}", incomingOrder.getId(), incomingOrder.getAssetSymbol());
+
+        // 0. 종목 행에 배타 락을 건다. 이 아래의 "활성 주문 조회 → 체결 계산 → 잔량 갱신"은
+        //    read-modify-write라 락이 없으면 같은 매도 주문이 여러 스레드에서 중복 체결된다.
+        //    락은 이 트랜잭션이 커밋될 때 풀리므로, 다음 스레드는 반드시 갱신된 잔량을 읽는다.
+        assetRepository.findBySymbolForUpdate(incomingOrder.getAssetSymbol())
+                .orElseThrow(() -> new IllegalArgumentException(
+                        "Asset not found with symbol: " + incomingOrder.getAssetSymbol()));
 
         // 1. 매칭을 위해 반대 방향의 활성화된(OPEN, PARTIAL) 주문 리스트를 DB에서 조회
         OrderType oppositeType = incomingOrder.getOrderType() == OrderType.BUY ? OrderType.SELL : OrderType.BUY;

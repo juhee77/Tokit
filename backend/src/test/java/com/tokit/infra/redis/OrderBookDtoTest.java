@@ -38,4 +38,22 @@ class OrderBookDtoTest {
         assertThat(orderBookDto.asks().get(0).price()).isEqualTo(new BigDecimal("151000"));
         assertThat(orderBookDto.asks().get(0).quantity()).isEqualTo(new BigDecimal("80.0"));
     }
+
+    @Test
+    @DisplayName("calculateSpread/calculateTotalBidVolume/calculateTotalAskVolume: 스프레드 및 매수/매도 총 수량이 정확히 계산된다.")
+    void calculateMetrics_ReturnsCorrectSpreadAndVolumes() {
+        // Given
+        OrderBookDto.OrderBookEntry bid1 = new OrderBookDto.OrderBookEntry(new BigDecimal("150000"), new BigDecimal("100"));
+        OrderBookDto.OrderBookEntry bid2 = new OrderBookDto.OrderBookEntry(new BigDecimal("149000"), new BigDecimal("50"));
+
+        OrderBookDto.OrderBookEntry ask1 = new OrderBookDto.OrderBookEntry(new BigDecimal("151000"), new BigDecimal("70"));
+        OrderBookDto.OrderBookEntry ask2 = new OrderBookDto.OrderBookEntry(new BigDecimal("152000"), new BigDecimal("30"));
+
+        OrderBookDto orderBookDto = new OrderBookDto("APPL-STO", List.of(bid1, bid2), List.of(ask1, ask2));
+
+        // When & Then
+        assertThat(orderBookDto.calculateSpread()).isEqualTo(new BigDecimal("1000"));
+        assertThat(orderBookDto.calculateTotalBidVolume()).isEqualTo(new BigDecimal("150"));
+        assertThat(orderBookDto.calculateTotalAskVolume()).isEqualTo(new BigDecimal("100"));
+    }
 }
