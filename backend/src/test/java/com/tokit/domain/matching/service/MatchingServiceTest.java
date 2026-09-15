@@ -120,7 +120,8 @@ class MatchingServiceTest {
     void matchOrder_ExecutesTradeAndBroadcastsOrderBook() {
         // Given
         when(assetRepository.findBySymbolForUpdate("PANGYO-STO")).thenReturn(Optional.of(testAsset));
-        when(orderRepository.findByAsset_SymbolAndStatusIn(eq("PANGYO-STO"), any()))
+        // 체결 후보 조회는 방향·가격 조건과 정렬을 DB에서 수행한다.
+        when(orderRepository.findMatchableOrders(eq("PANGYO-STO"), eq(OrderType.SELL), any(), any(), any()))
                 .thenReturn(List.of(sellOrder));
 
         MatchResult.Match match = new MatchResult.Match(sellOrder, new BigDecimal("10000"), new BigDecimal("10"));
@@ -144,8 +145,13 @@ class MatchingServiceTest {
     @DisplayName("updateAndBroadcastOrderBook: 매수/매도 호가창을 가격순 정렬 집계하여 Redis 및 STOMP 주제로 전송한다.")
     void updateAndBroadcastOrderBook_Success() {
         // Given
-        when(orderRepository.findByAsset_SymbolAndStatusIn(eq("PANGYO-STO"), any()))
-                .thenReturn(List.of(buyOrder, sellOrder));
+        // 호가창 집계도 DB에서 가격대별로 수행되어 상위 N호가만 돌아온다.
+        when(orderRepository.aggregateOrderBookSide(eq("PANGYO-STO"), eq(OrderType.BUY), any(), any()))
+                .thenReturn(List.of(new OrderBookDto.OrderBookEntry(
+                        new BigDecimal("10000"), new BigDecimal("10"))));
+        when(orderRepository.aggregateOrderBookSide(eq("PANGYO-STO"), eq(OrderType.SELL), any(), any()))
+                .thenReturn(List.of(new OrderBookDto.OrderBookEntry(
+                        new BigDecimal("10500"), new BigDecimal("10"))));
 
         // When
         matchingService.updateAndBroadcastOrderBook("PANGYO-STO");
