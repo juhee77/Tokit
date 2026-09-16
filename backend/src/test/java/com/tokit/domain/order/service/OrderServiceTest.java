@@ -6,6 +6,8 @@ import com.tokit.domain.order.entity.Order;
 import com.tokit.domain.order.entity.OrderStatus;
 import com.tokit.domain.order.entity.OrderType;
 import com.tokit.domain.order.repository.OrderRepository;
+import com.tokit.domain.orderbook.service.OrderBookService;
+import com.tokit.domain.asset.repository.AssetRepository;
 import com.tokit.domain.user.entity.User;
 import com.tokit.domain.user.service.UserService;
 import com.tokit.domain.wallet.entity.Wallet;
@@ -35,6 +37,12 @@ class OrderServiceTest {
 
     @InjectMocks
     private OrderService orderService;
+
+    @Mock
+    private OrderBookService orderBookService;
+
+    @Mock
+    private AssetRepository assetRepository;
 
     @Mock
     private OrderRepository orderRepository;
@@ -192,6 +200,7 @@ class OrderServiceTest {
                 .build();
         ReflectionTestUtils.setField(openOrder, "id", 500L);
 
+        when(assetRepository.findBySymbolForUpdate(any())).thenReturn(Optional.of(testAsset));
         when(orderRepository.findById(500L)).thenReturn(Optional.of(openOrder));
         when(walletRepository.findKrwWalletByUserIdWithPessimisticLock(1L)).thenReturn(Optional.of(krwWallet));
 
@@ -221,6 +230,7 @@ class OrderServiceTest {
                 .build();
         ReflectionTestUtils.setField(partialOrder, "id", 501L);
 
+        when(assetRepository.findBySymbolForUpdate(any())).thenReturn(Optional.of(testAsset));
         when(orderRepository.findById(501L)).thenReturn(Optional.of(partialOrder));
         when(walletRepository.findAssetWalletByUserIdAndAssetIdWithPessimisticLock(2L, 10L)).thenReturn(Optional.of(assetWallet));
 
@@ -248,6 +258,7 @@ class OrderServiceTest {
                 .build();
         ReflectionTestUtils.setField(filledOrder, "id", 502L);
 
+        when(assetRepository.findBySymbolForUpdate(any())).thenReturn(Optional.of(testAsset));
         when(orderRepository.findById(502L)).thenReturn(Optional.of(filledOrder));
 
         // When & Then

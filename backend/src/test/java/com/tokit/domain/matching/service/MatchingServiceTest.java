@@ -2,6 +2,7 @@ package com.tokit.domain.matching.service;
 
 import com.tokit.domain.asset.entity.Asset;
 import com.tokit.domain.asset.repository.AssetRepository;
+import com.tokit.domain.orderbook.service.OrderBookService;
 import com.tokit.domain.matching.engine.MatchResult;
 import com.tokit.domain.matching.engine.MatchingEngine;
 import com.tokit.domain.order.entity.Order;
@@ -28,6 +29,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import java.util.Optional;
 
+import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.Mockito.*;
 
 @ExtendWith(MockitoExtension.class)
@@ -35,6 +37,9 @@ class MatchingServiceTest {
 
     @InjectMocks
     private MatchingService matchingService;
+
+    @Mock
+    private OrderBookService orderBookService;
 
     @Mock
     private AssetRepository assetRepository;
@@ -120,6 +125,8 @@ class MatchingServiceTest {
     void matchOrder_ExecutesTradeAndBroadcastsOrderBook() {
         // Given
         when(assetRepository.findBySymbolForUpdate("PANGYO-STO")).thenReturn(Optional.of(testAsset));
+        // 락 획득 후 주문 상태를 다시 읽는다. (취소된 주문을 되살리지 않기 위함)
+        when(orderRepository.findByIdWithAsset(buyOrder.getId())).thenReturn(Optional.of(buyOrder));
         // 체결 후보 조회는 방향·가격 조건과 정렬을 DB에서 수행한다.
         when(orderRepository.findMatchableOrders(eq("PANGYO-STO"), eq(OrderType.SELL), any(), any(), any()))
                 .thenReturn(List.of(sellOrder));
@@ -129,6 +136,9 @@ class MatchingServiceTest {
 
         when(matchingEngine.match(eq(buyOrder), any())).thenReturn(matchResult);
 
+
+        when(orderBookService.getOrderBook(eq("PANGYO-STO"), anyInt()))
+                .thenReturn(new OrderBookDto("PANGYO-STO", List.of(), List.of()));
 
         // When
         matchingService.matchOrder(buyOrder);
@@ -145,13 +155,11 @@ class MatchingServiceTest {
     @DisplayName("updateAndBroadcastOrderBook: 매수/매도 호가창을 가격순 정렬 집계하여 Redis 및 STOMP 주제로 전송한다.")
     void updateAndBroadcastOrderBook_Success() {
         // Given
-        // 호가창 집계도 DB에서 가격대별로 수행되어 상위 N호가만 돌아온다.
-        when(orderRepository.aggregateOrderBookSide(eq("PANGYO-STO"), eq(OrderType.BUY), any(), any()))
-                .thenReturn(List.of(new OrderBookDto.OrderBookEntry(
-                        new BigDecimal("10000"), new BigDecimal("10"))));
-        when(orderRepository.aggregateOrderBookSide(eq("PANGYO-STO"), eq(OrderType.SELL), any(), any()))
-                .thenReturn(List.of(new OrderBookDto.OrderBookEntry(
-                        new BigDecimal("10500"), new BigDecimal("10"))));
+
+        when(orderBookService.getOrderBook(eq("PANGYO-STO"), anyInt()))
+                .thenReturn(new OrderBookDto("PANGYO-STO",
+                        List.of(new OrderBookDto.OrderBookEntry(new BigDecimal("10000"), new BigDecimal("10"))),
+                        List.of(new OrderBookDto.OrderBookEntry(new BigDecimal("10500"), new BigDecimal("10")))));
 
         // When
         matchingService.updateAndBroadcastOrderBook("PANGYO-STO");

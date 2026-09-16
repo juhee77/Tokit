@@ -7,6 +7,7 @@ import com.tokit.domain.order.entity.Order;
 import com.tokit.domain.order.entity.OrderStatus;
 import com.tokit.domain.order.entity.OrderType;
 import com.tokit.domain.order.repository.OrderRepository;
+import com.tokit.domain.orderbook.service.OrderBookService;
 import com.tokit.domain.trade.service.TradeService;
 import com.tokit.infra.redis.OrderBookDto;
 import com.tokit.infra.redis.RedisOrderBookRepository;
@@ -43,19 +44,32 @@ public class MatchingService {
     private final OrderRepository orderRepository;
     private final MatchingEngine matchingEngine;
     private final TradeService tradeService;
+    private final OrderBookService orderBookService;
     private final RedisOrderBookRepository redisOrderBookRepository;
     private final SimpMessagingTemplate messagingTemplate;
 
     @Transactional
-    public void matchOrder(Order incomingOrder) {
-        log.info("Starting match process for order id: {}, symbol: {}", incomingOrder.getId(), incomingOrder.getAssetSymbol());
+    public void matchOrder(Order order) {
+        log.info("Starting match process for order id: {}, symbol: {}", order.getId(), order.getAssetSymbol());
 
         // 0. 종목 행에 배타 락을 건다. 이 아래의 "활성 주문 조회 → 체결 계산 → 잔량 갱신"은
         //    read-modify-write라 락이 없으면 같은 매도 주문이 여러 스레드에서 중복 체결된다.
         //    락은 이 트랜잭션이 커밋될 때 풀리므로, 다음 스레드는 반드시 갱신된 잔량을 읽는다.
-        assetRepository.findBySymbolForUpdate(incomingOrder.getAssetSymbol())
+        assetRepository.findBySymbolForUpdate(order.getAssetSymbol())
                 .orElseThrow(() -> new IllegalArgumentException(
-                        "Asset not found with symbol: " + incomingOrder.getAssetSymbol()));
+                        "Asset not found with symbol: " + order.getAssetSymbol()));
+
+        // 0-1. 락을 잡은 뒤 주문 상태를 다시 읽는다.
+        //      컨슈머가 주문을 읽은 시점과 여기 도달한 시점 사이에 사용자가 취소했을 수 있고,
+        //      그대로 진행하면 아래 save가 취소된 주문을 다시 활성 상태로 되살린다.
+        final Order incomingOrder = orderRepository.findByIdWithAsset(order.getId())
+                .orElseThrow(() -> new IllegalArgumentException(
+                        "Order not found with id: " + order.getId()));
+        if (!ACTIVE_STATUSES.contains(incomingOrder.getStatus())) {
+            log.info("Skipping match for order {} — no longer active (status={})",
+                    incomingOrder.getId(), incomingOrder.getStatus());
+            return;
+        }
 
         // 1. 체결 가능한 반대 방향 주문만 가격-시간 우선순위로 조회한다.
         //    방향·가격 조건을 DB로 내리지 않으면 체결되지 않고 남은 주문이 쌓일수록
@@ -82,6 +96,11 @@ public class MatchingService {
             Long sellOrderId = incomingOrder.getOrderType() == OrderType.SELL ? incomingOrder.getId() : maker.getId();
             tradeService.saveTrade(buyOrderId, sellOrderId, incomingOrder.getAssetSymbol(), price, quantity);
 
+            // 체결분만큼 양쪽 가격대에서 잔량을 덜어낸다.
+            // 테이커는 자기 지정가에, 메이커는 자기 호가에 올라가 있다.
+            orderBookService.reduceFilled(maker, quantity);
+            orderBookService.reduceFilled(incomingOrder, quantity);
+
             // 메이커 주문 DB 업데이트
             orderRepository.save(maker);
         }
@@ -94,14 +113,9 @@ public class MatchingService {
     }
 
     public void updateAndBroadcastOrderBook(String symbol) {
-        // 집계·정렬·상위 N 제한을 모두 DB에서 수행한다. 결과가 20호가뿐인데 활성 주문
-        // 전체를 메모리로 읽으면, 체결마다 수행되는 이 재집계가 매칭 처리량의 상한이 된다.
-        List<OrderBookDto.OrderBookEntry> bids = orderRepository.aggregateOrderBookSide(
-                symbol, OrderType.BUY, ACTIVE_STATUSES, Pageable.ofSize(ORDER_BOOK_DEPTH));
-        List<OrderBookDto.OrderBookEntry> asks = orderRepository.aggregateOrderBookSide(
-                symbol, OrderType.SELL, ACTIVE_STATUSES, Pageable.ofSize(ORDER_BOOK_DEPTH));
-
-        OrderBookDto orderBook = new OrderBookDto(symbol, bids, asks);
+        // 물리화된 집계에서 상위 N호가만 읽는다. 스캔 범위가 활성 주문 수와 무관해져,
+        // 미체결 주문이 쌓여도 체결 1건의 비용이 늘지 않는다.
+        OrderBookDto orderBook = orderBookService.getOrderBook(symbol, ORDER_BOOK_DEPTH);
 
         // Redis 저장
         redisOrderBookRepository.saveOrderBook(symbol, orderBook);

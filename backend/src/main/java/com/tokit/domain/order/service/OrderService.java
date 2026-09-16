@@ -1,5 +1,6 @@
 package com.tokit.domain.order.service;
 
+import com.tokit.domain.asset.repository.AssetRepository;
 import com.tokit.domain.asset.service.AssetService;
 import com.tokit.domain.user.service.UserService;
 import com.tokit.domain.order.entity.Order;
@@ -11,6 +12,7 @@ import com.tokit.domain.asset.entity.Asset;
 import com.tokit.domain.wallet.entity.Wallet;
 import com.tokit.domain.wallet.repository.WalletRepository;
 import com.tokit.domain.fee.service.FeePolicy;
+import com.tokit.domain.orderbook.service.OrderBookService;
 import com.tokit.global.exception.BusinessException;
 import com.tokit.global.observability.TradingMetrics;
 import com.tokit.global.exception.ErrorCode;
@@ -31,10 +33,12 @@ public class OrderService {
     private final OrderRepository orderRepository;
     private final UserService userService;
     private final AssetService assetService;
+    private final AssetRepository assetRepository;
     private final WalletRepository walletRepository;
     private final OrderEventPublisher orderEventPublisher;
     private final TradingMetrics tradingMetrics;
     private final FeePolicy feePolicy;
+    private final OrderBookService orderBookService;
 
     @Transactional
     public Order placeOrder(Long userId, String assetSymbol, OrderType orderType, BigDecimal price, BigDecimal quantity) {
@@ -75,6 +79,9 @@ public class OrderService {
         
         orderRepository.save(order);
 
+        // 접수 즉시 호가창에 올린다. 매칭은 비동기지만 주문은 이미 체결 대기 상태다.
+        orderBookService.addOrder(order);
+
         // RabbitMQ 주문 등록 이벤트 발행
         OrderEvent event = new OrderEvent(
                 order.getId(),
@@ -99,6 +106,11 @@ public class OrderService {
             throw new BusinessException(ErrorCode.HANDLE_ACCESS_DENIED);
         }
 
+        // 매칭과 동일하게 종목 행 락을 먼저 잡는다. 락 순서를 맞춰야 교착이 생기지 않고,
+        // 비동기 매칭이 진행 중인 주문을 취소해도 두 경로가 서로의 갱신을 덮어쓰지 않는다.
+        assetRepository.findBySymbolForUpdate(order.getAssetSymbol())
+                .orElseThrow(() -> new BusinessException(ErrorCode.ASSET_NOT_FOUND));
+
         if (order.getStatus() != OrderStatus.OPEN && order.getStatus() != OrderStatus.PARTIAL) {
             throw new BusinessException(ErrorCode.ORDER_ALREADY_CLOSED);
         }
@@ -117,6 +129,9 @@ public class OrderService {
             BigDecimal releaseQuantity = order.getRemainingQuantity();
             assetWallet.updateBalance(assetWallet.getBalance().add(releaseQuantity), assetWallet.getLockedBalance().subtract(releaseQuantity));
         }
+
+        // 취소 전 잔량을 호가창에서 덜어낸다. (cancel() 이후에는 상태만 바뀌고 잔량은 그대로다)
+        orderBookService.removeRemaining(order, order.getRemainingQuantity());
 
         order.cancel();
         tradingMetrics.recordOrderCanceled();
