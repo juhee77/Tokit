@@ -18,6 +18,7 @@ public class TradingMetrics {
     private final Counter ordersCanceled;
     private final Counter tradesSettled;
     private final Counter onchainSettlementFailures;
+    private final Counter orderMatchingFailures;
     private final Counter reconciliationMismatches;
     private final Timer matchingDuration;
 
@@ -33,6 +34,9 @@ public class TradingMetrics {
                 .register(registry);
         this.onchainSettlementFailures = Counter.builder("tokit.settlement.onchain.failures")
                 .description("재시도 후에도 실패한 온체인 결제 건수")
+                .register(registry);
+        this.orderMatchingFailures = Counter.builder("tokit.orders.matching.failures")
+                .description("재시도 후에도 매칭에 실패해 DLQ로 이동한 주문 수")
                 .register(registry);
         this.reconciliationMismatches = Counter.builder("tokit.reconciliation.mismatches")
                 .description("대사 배치가 발견한 온·오프체인 잔고 불일치 건수")
@@ -52,6 +56,10 @@ public class TradingMetrics {
 
     public void recordTradeSettled() {
         tradesSettled.increment();
+    }
+
+    public void recordOrderMatchingFailure() {
+        orderMatchingFailures.increment();
     }
 
     public void recordOnchainSettlementFailure() {
