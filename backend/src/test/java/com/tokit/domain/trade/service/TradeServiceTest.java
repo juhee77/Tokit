@@ -28,6 +28,9 @@ import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
+import com.tokit.global.event.PostCommitEvents;
+import org.springframework.context.ApplicationEventPublisher;
+
 import static org.mockito.Mockito.*;
 
 @ExtendWith(MockitoExtension.class)
@@ -35,6 +38,9 @@ class TradeServiceTest {
 
     @InjectMocks
     private TradeService tradeService;
+
+    @Mock
+    private ApplicationEventPublisher eventPublisher;
 
     @Mock
     private TradeRepository tradeRepository;
@@ -196,7 +202,11 @@ class TradeServiceTest {
         assertThat(sellerAssetWallet.getLockedBalance().stripTrailingZeros()).isEqualTo(BigDecimal.ZERO);
 
         verify(tradeRepository, times(1)).save(any(Trade.class));
-        verify(orderEventPublisher, times(1)).publishTrade(any());
+
+        // 온체인 발행은 커밋 이후로 미뤄졌다. 체결 트랜잭션 안에서 발행하면
+        // 롤백되어도 원장에 없는 체결이 블록체인으로 넘어간다.
+        verify(orderEventPublisher, never()).publishTrade(any());
+        verify(eventPublisher, times(1)).publishEvent(any(PostCommitEvents.TradeSettled.class));
     }
 
     @Test

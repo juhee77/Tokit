@@ -12,13 +12,18 @@ import com.tokit.domain.wallet.repository.WalletRepository;
 import com.tokit.domain.fee.entity.TradeFee;
 import com.tokit.domain.fee.repository.TradeFeeRepository;
 import com.tokit.domain.fee.service.FeePolicy;
+import com.tokit.global.event.PostCommitEvents;
 import com.tokit.global.observability.TradingMetrics;
 import com.tokit.infra.rabbitmq.TradeEvent;
 import com.tokit.infra.rabbitmq.OrderEventPublisher;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.event.TransactionPhase;
+import org.springframework.transaction.event.TransactionalEventListener;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
 import java.io.IOException;
@@ -43,6 +48,7 @@ public class TradeService {
     private final TradingMetrics tradingMetrics;
     private final FeePolicy feePolicy;
     private final TradeFeeRepository tradeFeeRepository;
+    private final ApplicationEventPublisher eventPublisher;
     
     // 심볼별 SSE Emitter 리스트 관리
     private final Map<String, List<SseEmitter>> emitters = new ConcurrentHashMap<>();
@@ -118,16 +124,16 @@ public class TradeService {
                 price,
                 quantity
         );
-        orderEventPublisher.publishTrade(tradeEvent);
-        
+        // 발행과 스트리밍은 커밋 이후로 미룬다. 여기서 바로 발행하면 롤백 시
+        // 원장에 없는 체결이 온체인으로 넘어간다.
+        eventPublisher.publishEvent(new PostCommitEvents.TradeSettled(
+                savedTrade.getId(), assetSymbol, tradeEvent));
+
         recordFee(savedTrade, buyOrder.getUser(), TradeFee.FeeSide.BUY, totalAmount, fee);
         recordFee(savedTrade, sellOrder.getUser(), TradeFee.FeeSide.SELL, totalAmount, fee);
 
         tradingMetrics.recordTradeSettled();
 
-        // 실시간 스트리밍 전송
-        broadcastTrade(savedTrade);
-        
         return savedTrade;
     }
 
@@ -164,6 +170,19 @@ public class TradeService {
                 emitters.remove(assetSymbol);
             }
         }
+    }
+
+    /**
+     * 커밋이 끝나고 락이 풀린 뒤에 실행된다.
+     *
+     * <p>클래스에 걸린 {@code @Transactional}을 그대로 물려받으면 커밋 이후 리스너에서는
+     * 쓸 수 없으므로, 조회를 위한 새 트랜잭션을 명시적으로 연다.
+     */
+    @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
+    @Transactional(propagation = Propagation.REQUIRES_NEW, readOnly = true)
+    public void onTradeSettled(PostCommitEvents.TradeSettled event) {
+        orderEventPublisher.publishTrade(event.onChainEvent());
+        tradeRepository.findById(event.tradeId()).ifPresent(this::broadcastTrade);
     }
 
     private void broadcastTrade(Trade trade) {

@@ -8,15 +8,19 @@ import com.tokit.domain.order.entity.OrderStatus;
 import com.tokit.domain.order.entity.OrderType;
 import com.tokit.domain.order.repository.OrderRepository;
 import com.tokit.domain.orderbook.service.OrderBookService;
+import com.tokit.global.event.PostCommitEvents;
 import com.tokit.domain.trade.service.TradeService;
 import com.tokit.infra.redis.OrderBookDto;
 import com.tokit.infra.redis.RedisOrderBookRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.data.domain.Pageable;
 import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.event.TransactionPhase;
+import org.springframework.transaction.event.TransactionalEventListener;
 
 import java.math.BigDecimal;
 import java.util.ArrayList;
@@ -47,6 +51,7 @@ public class MatchingService {
     private final OrderBookService orderBookService;
     private final RedisOrderBookRepository redisOrderBookRepository;
     private final SimpMessagingTemplate messagingTemplate;
+    private final ApplicationEventPublisher eventPublisher;
 
     @Transactional
     public void matchOrder(Order order) {
@@ -108,8 +113,17 @@ public class MatchingService {
         // 4. 신규 주문 DB 업데이트
         orderRepository.save(incomingOrder);
 
-        // 5. 호가창(Order Book) 업데이트 및 Redis 저장 / WebSocket 브로드캐스트
-        updateAndBroadcastOrderBook(incomingOrder.getAssetSymbol());
+        // 5. 호가창 브로드캐스트는 커밋 이후로 미룬다.
+        //    여기서 바로 보내면 롤백 시 이미 잘못된 호가창을 내보낸 뒤가 되고,
+        //    네트워크 I/O가 종목 락을 쥔 시간을 늘려 매칭 처리량을 깎는다.
+        eventPublisher.publishEvent(
+                new PostCommitEvents.OrderBookChanged(incomingOrder.getAssetSymbol()));
+    }
+
+    /** 커밋이 끝나고 락이 풀린 뒤에 실행된다. */
+    @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
+    public void onOrderBookChanged(PostCommitEvents.OrderBookChanged event) {
+        updateAndBroadcastOrderBook(event.symbol());
     }
 
     public void updateAndBroadcastOrderBook(String symbol) {
