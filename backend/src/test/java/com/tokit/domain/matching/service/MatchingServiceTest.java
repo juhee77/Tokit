@@ -3,6 +3,7 @@ package com.tokit.domain.matching.service;
 import com.tokit.domain.asset.entity.Asset;
 import com.tokit.domain.asset.repository.AssetRepository;
 import com.tokit.domain.orderbook.service.OrderBookService;
+import com.tokit.global.event.PostCommitEvents;
 import com.tokit.domain.matching.engine.MatchResult;
 import com.tokit.domain.matching.engine.MatchingEngine;
 import com.tokit.domain.order.entity.Order;
@@ -30,6 +31,9 @@ import static org.mockito.ArgumentMatchers.eq;
 import java.util.Optional;
 
 import static org.mockito.ArgumentMatchers.anyInt;
+import static org.mockito.ArgumentMatchers.anyString;
+import org.springframework.context.ApplicationEventPublisher;
+
 import static org.mockito.Mockito.*;
 
 @ExtendWith(MockitoExtension.class)
@@ -37,6 +41,9 @@ class MatchingServiceTest {
 
     @InjectMocks
     private MatchingService matchingService;
+
+    @Mock
+    private ApplicationEventPublisher eventPublisher;
 
     @Mock
     private OrderBookService orderBookService;
@@ -121,7 +128,7 @@ class MatchingServiceTest {
 
 
     @Test
-    @DisplayName("matchOrder: 매수 주문 매칭 성공 시 체결 내역 저장, DB 업데이트, STOMP 호가창 브로드캐스트가 연동 실행된다.")
+    @DisplayName("matchOrder: 매수 주문 매칭 성공 시 체결 내역 저장과 DB 업데이트가 이뤄지고, 호가창 브로드캐스트는 커밋 이후로 미뤄진다.")
     void matchOrder_ExecutesTradeAndBroadcastsOrderBook() {
         // Given
         when(assetRepository.findBySymbolForUpdate("PANGYO-STO")).thenReturn(Optional.of(testAsset));
@@ -136,10 +143,6 @@ class MatchingServiceTest {
 
         when(matchingEngine.match(eq(buyOrder), any())).thenReturn(matchResult);
 
-
-        when(orderBookService.getOrderBook(eq("PANGYO-STO"), anyInt()))
-                .thenReturn(new OrderBookDto("PANGYO-STO", List.of(), List.of()));
-
         // When
         matchingService.matchOrder(buyOrder);
 
@@ -148,7 +151,12 @@ class MatchingServiceTest {
                 eq(100L), eq(200L), eq("PANGYO-STO"), eq(new BigDecimal("10000")), eq(new BigDecimal("10"))
         );
         verify(orderRepository, atLeastOnce()).save(any(Order.class));
-        verify(messagingTemplate, times(1)).convertAndSend(eq("/topic/orderbook/PANGYO-STO"), any(OrderBookDto.class));
+
+        // 브로드캐스트는 커밋 이후로 미뤄졌다. 매칭 구간에서는 이벤트 발행만 일어나야 하며,
+        // 여기서 직접 전송하면 롤백 시 잘못된 호가창이 이미 나간 뒤가 된다.
+        verify(messagingTemplate, never()).convertAndSend(anyString(), any(OrderBookDto.class));
+        verify(eventPublisher, times(1))
+                .publishEvent(new PostCommitEvents.OrderBookChanged("PANGYO-STO"));
     }
 
     @Test
