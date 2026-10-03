@@ -70,7 +70,9 @@ SQL
 
   # 1) 큐 적재
   cd "$REPO/backend"/loadtest
+  # 측정 창(30초)보다 충분히 큰 백로그를 만든다. 큐가 창 안에 마르면 하한값만 나온다.
   docker run --rm -i --add-host=host.docker.internal:host-gateway -v "$PWD:/scripts" \
+    -e VUS="${LOAD_VUS:-20}" -e STEADY="${LOAD_STEADY:-60s}" \
     grafana/k6:latest run "/scripts/$script" >/dev/null 2>&1 || true
 
   # 2) 앱 정지 — 부하 생성과 측정을 분리한다

@@ -14,14 +14,19 @@ const USERS = parseInt(__ENV.USERS || '20');
 
 const placeOrderLatency = new Trend('order_placement_latency', true);
 
+// 적재량은 환경변수로 조절한다. 소진 속도가 빨라지면 측정 창(30초) 안에 큐가 말라
+// 남은 시간이 분모에 섞이므로, 측정 대상보다 충분히 큰 백로그가 필요하다.
+const VUS = parseInt(__ENV.VUS || '10');
+const STEADY = __ENV.STEADY || '30s';
+
 export const options = {
   scenarios: {
     ramp: {
       executor: 'ramping-vus',
       startVUs: 1,
       stages: [
-        { duration: '10s', target: 10 },
-        { duration: '30s', target: 10 },
+        { duration: '10s', target: VUS },
+        { duration: STEADY, target: VUS },
         { duration: '10s', target: 0 },
       ],
     },
