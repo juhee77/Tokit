@@ -95,10 +95,20 @@ public class DividendBatchConfig {
 
         return wallet -> {
             BigDecimal userTokenBalance = wallet.getBalance().add(wallet.getLockedBalance());
-            // 1. 지분율 계산 (총 발행량 대비 주주 보유량)
-            BigDecimal shareRatio = userTokenBalance.divide(totalSupply, 6, RoundingMode.HALF_UP);
-            // 2. 배당금 계산 및 소수점 절사 (원화 예치금 단위 절사)
-            BigDecimal payoutAmount = totalDividend.multiply(shareRatio).setScale(0, RoundingMode.DOWN);
+
+            // 1. 지급액은 중간 반올림 없이 금액에서 직접 계산한다.
+            //    지분율을 먼저 6자리로 반올림한 뒤 곱하면, 그 반올림 오차가 주주 수만큼
+            //    누적되어 배당 재원을 초과한다. 주주 6명이 1/6씩 보유한 경우 지분율이
+            //    0.1666666...에서 0.166667로 올라가 합이 1.000002가 되고, 재원 100만 원에
+            //    100만 2원이 지급된다. 주주가 늘면 상대 오차도 함께 커져, 600명 규모에서는
+            //    10억 원 재원에 20만 원이 더 나갔다.
+            //    금액에서 한 번만 내림하면 지급 총액은 재원을 넘지 않는다.
+            BigDecimal payoutAmount = totalDividend.multiply(userTokenBalance)
+                    .divide(totalSupply, 0, RoundingMode.DOWN);
+
+            // 2. 지분율은 기록·표시용이다. 지급액 계산에 쓰지 않으며, 합이 100%를 넘지
+            //    않도록 내림한다.
+            BigDecimal shareRatio = userTokenBalance.divide(totalSupply, 6, RoundingMode.DOWN);
 
             log.info("[Dividend Batch Processor] User: {} ({}), Balance: {} STO, Share Ratio: {}, Payout Amount: {} KRW",
                     wallet.getUser().getName(), wallet.getUser().getWalletAddress(), userTokenBalance, shareRatio, payoutAmount);
