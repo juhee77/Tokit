@@ -2,7 +2,7 @@ package com.tokit.domain.trade.dto;
 
 import com.tokit.domain.asset.entity.Asset;
 import com.tokit.domain.order.entity.Order;
-import com.tokit.domain.trade.controller.TradeController.TradeResponse;
+import com.tokit.domain.trade.dto.TradeResponse;
 import com.tokit.domain.trade.entity.Trade;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
