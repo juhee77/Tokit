@@ -5,6 +5,7 @@ import com.tokit.domain.dividend.entity.DividendPayout;
 import com.tokit.domain.dividend.entity.DividendPayoutDetail;
 import com.tokit.domain.dividend.repository.DividendPayoutDetailRepository;
 import com.tokit.domain.dividend.repository.DividendPayoutRepository;
+import com.tokit.domain.dividend.service.DividendSettlementService;
 import com.tokit.domain.user.entity.User;
 import com.tokit.domain.wallet.entity.Wallet;
 import com.tokit.domain.wallet.repository.WalletRepository;
@@ -38,12 +39,16 @@ class DividendBatchTest {
     @Mock
     private DividendPayoutDetailRepository dividendPayoutDetailRepository;
 
+    @Mock
+    private DividendSettlementService dividendSettlementService;
+
     @BeforeEach
     void setUp() {
         dividendBatchConfig = new DividendBatchConfig(
                 walletRepository,
                 dividendPayoutRepository,
-                dividendPayoutDetailRepository
+                dividendPayoutDetailRepository,
+                dividendSettlementService
         );
     }
 
