@@ -9,7 +9,7 @@ import com.tokit.domain.wallet.dto.WalletResponse;
 import com.tokit.domain.order.repository.OrderRepository;
 import com.tokit.domain.order.controller.OrderController.OrderResponse;
 import com.tokit.domain.trade.repository.TradeRepository;
-import com.tokit.domain.trade.controller.TradeController.TradeResponse;
+import com.tokit.domain.trade.dto.TradeResponse;
 import com.tokit.global.exception.BusinessException;
 import com.tokit.global.exception.ErrorCode;
 import lombok.RequiredArgsConstructor;
