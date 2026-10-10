@@ -1,5 +1,6 @@
 package com.tokit.domain.trade.service;
 
+import com.tokit.domain.trade.dto.TradeResponse;
 import com.tokit.domain.trade.entity.Trade;
 import com.tokit.domain.trade.repository.TradeRepository;
 import com.tokit.domain.trade.dto.CandleResponse;
@@ -159,9 +160,17 @@ public class TradeService {
         tradeRepository.findById(event.tradeId()).ifPresent(this::broadcastTrade);
     }
 
+    /**
+     * 체결 내역을 구독자에게 전파한다.
+     *
+     * <p>엔티티가 아니라 DTO를 내보낸다. 변환은 이 메서드를 호출하는 트랜잭션 안에서
+     * 일어나므로 지연 로딩이 안전하게 해결되고, 전파 시점에는 더 이상 영속성 컨텍스트에
+     * 의존하지 않는다. 연관 관계를 따라 상대 투자자 정보가 내려가는 것도 막는다.
+     */
     private void broadcastTrade(Trade trade) {
         tradeStreamBroadcaster.broadcast(
-                trade.getAssetSymbol(), "TRADE", String.valueOf(trade.getId()), trade);
+                trade.getAssetSymbol(), "TRADE", String.valueOf(trade.getId()),
+                TradeResponse.from(trade));
     }
 
     public List<CandleResponse> getCandlesBySymbol(String symbol) {
