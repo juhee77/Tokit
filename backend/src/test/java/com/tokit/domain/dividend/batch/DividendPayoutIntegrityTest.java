@@ -200,6 +200,33 @@ class DividendPayoutIntegrityTest {
                     assertThat(d.getStatus())
                             .as("배당 내역이 SUCCESS로 마감되지 않았다")
                             .isEqualTo("SUCCESS"));
+
+            // 7. 보존 법칙: 재원 = 분배 총액 + 미분배 잔액.
+            //    집행 결과가 원장에 기록되므로 상세 내역을 합산하지 않고 직접 대조한다.
+            DividendPayout settled = payoutRepository.findById(payout.getId()).orElseThrow();
+            softly.assertThat(settled.getDistributedAmount().add(settled.getUndistributedAmount())
+                            .compareTo(pool))
+                    .as("재원(%s) != 분배(%s) + 미분배(%s)",
+                            pool, settled.getDistributedAmount(), settled.getUndistributedAmount())
+                    .isZero();
+            softly.assertThat(settled.getDistributedAmount().compareTo(paidTotal))
+                    .as("기록된 분배 총액(%s)과 실제 지급 합(%s)이 다르다",
+                            settled.getDistributedAmount(), paidTotal)
+                    .isZero();
+
+            // 8. 절사로 남은 잔액은 발행사 계정으로 돌아가야 한다. 아무 데도 넣지 않으면
+            //    재원에서 빠진 채 원장에서 사라진다.
+            Issuer settledIssuer = issuerRepository.findById(issuer.getId()).orElseThrow();
+            softly.assertThat(settledIssuer.getUser())
+                    .as("발행사 정산 계정이 만들어지지 않았다")
+                    .isNotNull();
+            BigDecimal issuerBalance = walletRepository
+                    .findKrwWalletByUserId(settledIssuer.getUser().getId())
+                    .orElseThrow().getBalance();
+            softly.assertThat(issuerBalance.compareTo(settled.getUndistributedAmount()))
+                    .as("발행사 지갑 잔고(%s)가 미분배 잔액(%s)과 다르다",
+                            issuerBalance, settled.getUndistributedAmount())
+                    .isZero();
         });
     }
 }

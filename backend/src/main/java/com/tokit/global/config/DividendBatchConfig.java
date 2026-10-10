@@ -4,6 +4,7 @@ import com.tokit.domain.dividend.entity.DividendPayout;
 import com.tokit.domain.dividend.entity.DividendPayoutDetail;
 import com.tokit.domain.dividend.repository.DividendPayoutDetailRepository;
 import com.tokit.domain.dividend.repository.DividendPayoutRepository;
+import com.tokit.domain.dividend.service.DividendSettlementService;
 import com.tokit.domain.wallet.entity.Wallet;
 import com.tokit.domain.wallet.repository.WalletRepository;
 import lombok.extern.slf4j.Slf4j;
@@ -36,13 +37,16 @@ public class DividendBatchConfig {
     private final WalletRepository walletRepository;
     private final DividendPayoutRepository dividendPayoutRepository;
     private final DividendPayoutDetailRepository dividendPayoutDetailRepository;
+    private final DividendSettlementService dividendSettlementService;
 
     public DividendBatchConfig(@Lazy WalletRepository walletRepository,
                                @Lazy DividendPayoutRepository dividendPayoutRepository,
-                               @Lazy DividendPayoutDetailRepository dividendPayoutDetailRepository) {
+                               @Lazy DividendPayoutDetailRepository dividendPayoutDetailRepository,
+                               @Lazy DividendSettlementService dividendSettlementService) {
         this.walletRepository = walletRepository;
         this.dividendPayoutRepository = dividendPayoutRepository;
         this.dividendPayoutDetailRepository = dividendPayoutDetailRepository;
+        this.dividendSettlementService = dividendSettlementService;
     }
 
     @Bean
@@ -150,25 +154,25 @@ public class DividendBatchConfig {
         };
     }
 
+    /**
+     * 배치 종료 시점에 정산을 위임한다.
+     *
+     * <p>{@code afterJob}은 트랜잭션과 영속성 세션 밖에서 실행되므로 지연 로딩을 건드릴 수
+     * 없다. 조회·계산·이체를 한 트랜잭션으로 묶어야 하므로 정산은 전용 서비스가 수행한다.
+     */
     @Bean
     public JobExecutionListener dividendJobListener() {
         return new JobExecutionListener() {
             @Override
             public void afterJob(JobExecution jobExecution) {
                 Long payoutId = jobExecution.getJobParameters().getLong("payoutId");
-                if (payoutId != null) {
-                    DividendPayout payout = dividendPayoutRepository.findById(payoutId).orElse(null);
-                    if (payout != null) {
-                        if (jobExecution.getStatus() == BatchStatus.COMPLETED) {
-                            payout.updateStatus("COMPLETED");
-                        } else {
-                            payout.updateStatus("FAILED");
-                        }
-                        dividendPayoutRepository.save(payout);
-                        log.info("[Dividend Payout Batch] Job ended. Dividend ID {} status updated to: {}", payoutId, payout.getStatus());
-                    }
+                if (payoutId == null) {
+                    return;
                 }
+                dividendSettlementService.settle(
+                        payoutId, jobExecution.getStatus() == BatchStatus.COMPLETED);
             }
         };
     }
+
 }
