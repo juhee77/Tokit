@@ -40,6 +40,9 @@ class TradeServiceTest {
     private TradeService tradeService;
 
     @Mock
+    private TradeStreamBroadcaster tradeStreamBroadcaster;
+
+    @Mock
     private ApplicationEventPublisher eventPublisher;
 
     @Mock
@@ -212,11 +215,16 @@ class TradeServiceTest {
     @Test
     @DisplayName("subscribeTrades: 클라이언트 체결 내역 SSE 스트림 구독 요청 시 SseEmitter를 생성하여 반환한다.")
     void subscribeTrades_ReturnsSseEmitter() {
+        // Given — 구독자 관리는 TradeStreamBroadcaster가 담당하고 서비스는 위임만 한다.
+        SseEmitter expected = new SseEmitter();
+        when(tradeStreamBroadcaster.subscribe("GWANGHWAMUN-STO")).thenReturn(expected);
+
         // When
         SseEmitter emitter = tradeService.subscribeTrades("GWANGHWAMUN-STO");
 
         // Then
-        assertThat(emitter).isNotNull();
+        assertThat(emitter).isSameAs(expected);
+        verify(tradeStreamBroadcaster, times(1)).subscribe("GWANGHWAMUN-STO");
     }
 
 }
