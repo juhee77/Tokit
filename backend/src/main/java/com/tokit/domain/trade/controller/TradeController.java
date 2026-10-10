@@ -1,5 +1,6 @@
 package com.tokit.domain.trade.controller;
 
+import com.tokit.domain.trade.dto.TradeResponse;
 import com.tokit.domain.trade.entity.Trade;
 import com.tokit.domain.trade.service.TradeService;
 import com.tokit.domain.trade.dto.CandleResponse;
@@ -24,27 +25,6 @@ public class TradeController {
 
     private final TradeService tradeService;
 
-    public record TradeResponse(
-        Long id,
-        Long buyOrderId,
-        Long sellOrderId,
-        String assetSymbol,
-        BigDecimal price,
-        BigDecimal quantity,
-        LocalDateTime createdAt
-    ) {
-        public static TradeResponse from(Trade trade) {
-            return new TradeResponse(
-                trade.getId(),
-                trade.getBuyOrderId(),
-                trade.getSellOrderId(),
-                trade.getAssetSymbol(),
-                trade.getPrice(),
-                trade.getQuantity(),
-                trade.getCreatedAt()
-            );
-        }
-    }
 
     @GetMapping("/asset/{symbol}")
     @Operation(summary = "자산별 체결 내역 조회", description = "특정 자산 심볼(예: APPL-STO)의 최근 체결 내역 리스트를 조회합니다.")
