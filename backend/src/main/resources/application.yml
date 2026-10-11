@@ -91,6 +91,11 @@ logging:
 
 # Custom configurations
 tokit:
+  idempotency:
+    # 처리 중(PROCESSING) 표시의 수명. 처리가 이보다 오래 걸리면 같은 요청이 다시 실행될 수 있다.
+    processing-ttl: ${IDEMPOTENCY_PROCESSING_TTL:120s}
+    # 완료된 응답을 재요청에 돌려주는 기간.
+    completed-ttl: ${IDEMPOTENCY_COMPLETED_TTL:10m}
   fee:
     # 2차 거래 편도 수수료율 (매수/매도 각각 부과). 0.001 = 0.1%
     trading-rate: ${TRADING_FEE_RATE:0.001}
