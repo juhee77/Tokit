@@ -82,7 +82,7 @@ public class DividendBatchConfig {
         return new RepositoryItemReaderBuilder<Wallet>()
                 .name("dividendReader")
                 .repository(walletRepository)
-                .methodName("findByAsset_IdAndBalanceGreaterThan")
+                .methodName("findActiveHoldersByAssetId")
                 .arguments(List.of(assetId, BigDecimal.ZERO))
                 .sorts(Map.of("id", Sort.Direction.ASC))
                 .pageSize(10)
