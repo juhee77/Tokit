@@ -98,6 +98,67 @@ class DividendPayoutIntegrityTest {
         assertPoolIsNotExceeded(600, BigDecimal.valueOf(1_000_000_000));
     }
 
+    @Test
+    @DisplayName("보유 물량 전부를 매도 호가에 걸어둔 주주(balance=0, lockedBalance>0)도 누락 없이 배당을 받는다.")
+    void holderWithAllTokensLockedInSellOrderStillReceivesDividend() throws Exception {
+        String uid = UUID.randomUUID().toString().substring(0, 8);
+        Asset asset = assetRepository.save(Asset.builder()
+                .issuer(issuer)
+                .name("Locked Holder Dividend Asset")
+                .symbol("LKD-" + uid)
+                .totalSupply(BigDecimal.valueOf(2))
+                .issuePrice(BigDecimal.valueOf(10000))
+                .status("거래중")
+                .contractAddress("0xLockedDividendTest")
+                .build());
+
+        User freeHolder = userRepository.save(User.builder()
+                .name("free-holder").email("free-" + uid + "@test.com")
+                .password("{noop}pw").walletAddress("0xFREE" + uid).kycStatus(true).build());
+        User lockedHolder = userRepository.save(User.builder()
+                .name("locked-holder").email("locked-" + uid + "@test.com")
+                .password("{noop}pw").walletAddress("0xLOCK" + uid).kycStatus(true).build());
+
+        // freeHolder: 가용 잔고 1토큰 (balance=1, locked=0)
+        walletRepository.save(Wallet.builder().user(freeHolder).asset(asset)
+                .balance(BigDecimal.ONE).lockedBalance(BigDecimal.ZERO).build());
+        walletRepository.save(Wallet.builder().user(freeHolder).asset(null)
+                .balance(BigDecimal.ZERO).lockedBalance(BigDecimal.ZERO).build());
+
+        // lockedHolder: 전량 매도 주문 대기 중 (balance=0, locked=1)
+        walletRepository.save(Wallet.builder().user(lockedHolder).asset(asset)
+                .balance(BigDecimal.ZERO).lockedBalance(BigDecimal.ONE).build());
+        walletRepository.save(Wallet.builder().user(lockedHolder).asset(null)
+                .balance(BigDecimal.ZERO).lockedBalance(BigDecimal.ZERO).build());
+
+        BigDecimal pool = BigDecimal.valueOf(1_000_000);
+        DividendPayout payout = payoutRepository.save(DividendPayout.builder()
+                .asset(asset)
+                .totalDividendAmount(pool)
+                .payoutDate(LocalDateTime.now())
+                .status("PENDING")
+                .build());
+
+        JobParameters params = new JobParametersBuilder()
+                .addLong("payoutId", payout.getId())
+                .addLong("time", System.currentTimeMillis())
+                .toJobParameters();
+        JobExecution execution = jobLauncher.run(dividendPayoutJob, params);
+        assertThat(execution.getStatus()).isEqualTo(BatchStatus.COMPLETED);
+
+        BigDecimal freeBalance = walletRepository.findKrwWalletByUserId(freeHolder.getId()).orElseThrow().getBalance();
+        BigDecimal lockedBalance = walletRepository.findKrwWalletByUserId(lockedHolder.getId()).orElseThrow().getBalance();
+
+        assertSoftly(softly -> {
+            softly.assertThat(freeBalance.compareTo(BigDecimal.valueOf(500_000)))
+                    .as("가용 보유 주주 배당금")
+                    .isZero();
+            softly.assertThat(lockedBalance.compareTo(BigDecimal.valueOf(500_000)))
+                    .as("매도 주문 홀딩 주주 배당금 — balance=0이어도 lockedBalance=1이므로 동일하게 지급되어야 한다")
+                    .isZero();
+        });
+    }
+
     /**
      * 주주 전원이 자산을 1토큰씩 균등 보유한 상태에서 배당을 집행하고 불변식을 검증한다.
      *
