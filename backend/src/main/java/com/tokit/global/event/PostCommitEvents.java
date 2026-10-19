@@ -1,18 +1,21 @@
 package com.tokit.global.event;
 
+import com.tokit.infra.rabbitmq.OrderEvent;
 import com.tokit.infra.rabbitmq.TradeEvent;
 
 /**
  * 커밋 이후에만 외부로 내보내야 하는 사건들.
  *
- * <p>체결과 호가창 갱신은 DB 트랜잭션 안에서 일어나지만, 그 결과를 알리는 일(RabbitMQ 발행,
- * SSE·STOMP 전송, Redis 캐시 갱신)을 같은 트랜잭션 안에서 하면 두 가지 문제가 생긴다.
+ * <p>주문·체결·호가창 갱신은 DB 트랜잭션 안에서 일어나지만, 그 결과를 알리는 일(RabbitMQ 발행,
+ * SSE·STOMP 전송, Redis 캐시 갱신)을 같은 트랜잭션 안에서 하면 세 가지 문제가 생긴다.
  *
  * <ol>
- *   <li><b>정확성</b>: 트랜잭션이 롤백되어도 이미 내보낸 뒤다. 특히 RabbitMQ로 발행된
+ *   <li><b>커밋 전 소비</b>: {@code OrderService.placeOrder}가 커밋되기 전에 RabbitMQ 컨슈머가
+ *       먼저 메시지를 받으면 {@code findByIdWithAsset}이 빈 값을 반환해 정상 주문이 DLQ로 빠진다. (#19)</li>
+ *   <li><b>롤백 불일치</b>: 트랜잭션이 롤백되어도 이미 내보낸 뒤다. 특히 RabbitMQ로 발행된
  *       체결 이벤트는 온체인 이체를 트리거하므로, 원장에 없는 체결이 블록체인에 기록된다.</li>
- *   <li><b>처리량</b>: 매칭은 종목 행 배타 락을 쥔 채 진행되고 락은 커밋 시점에 풀린다.
- *       트랜잭션 안에서 네트워크 I/O를 하면 그 지연이 그대로 종목별 매칭 처리량의 상한이 된다.</li>
+ *   <li><b>처리량</b>: 매칭·주문은 배타 락을 쥔 채 진행되고 락은 커밋 시점에 풀린다.
+ *       트랜잭션 안에서 네트워크 I/O를 하면 그 지연이 그대로 처리량의 상한이 된다.</li>
  * </ol>
  *
  * <p>그래서 트랜잭션 안에서는 이벤트만 발행하고, 실제 전송은
@@ -23,6 +26,9 @@ import com.tokit.infra.rabbitmq.TradeEvent;
 public final class PostCommitEvents {
 
     private PostCommitEvents() {}
+
+    /** 신규 주문이 커밋되었다. 커밋 후 매칭 큐로 이벤트를 발행한다. (#19) */
+    public record OrderPlaced(OrderEvent orderEvent) {}
 
     /** 해당 종목의 호가창이 바뀌었다. 커밋 후 스냅샷을 다시 읽어 캐시·브로드캐스트한다. */
     public record OrderBookChanged(String symbol) {}
