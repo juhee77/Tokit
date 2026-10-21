@@ -1,0 +1,18 @@
+# 부하 측정 전용 프로파일 (#24)
+#
+# 기본 application.yml은 개발 편의를 위해 show-sql, format_sql, DEBUG 로그를 켜 두고 있다.
+# 특히 jpa.show-sql은 로거를 거치지 않고 stdout으로 직접 출력되므로, 매칭 1건마다 실행되는
+# 수십 줄의 SQL 출력 I/O가 처리량 측정에 섞인다. 부하 측정 시에는 SQL 출력과 DEBUG 로그를
+# 끄고 순수 애플리케이션·DB 처리량만 측정한다.
+spring:
+  jpa:
+    show-sql: false
+    properties:
+      hibernate:
+        format_sql: false
+
+logging:
+  level:
+    root: INFO
+    com.tokit: INFO
+    org.hibernate.SQL: WARN
