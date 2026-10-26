@@ -8,6 +8,7 @@ import com.tokit.domain.user.entity.User;
 import com.tokit.domain.user.repository.UserRepository;
 import com.tokit.domain.wallet.entity.Wallet;
 import com.tokit.domain.wallet.repository.WalletRepository;
+import com.tokit.domain.wallet.service.WalletLockOrder;
 import com.tokit.infra.blockchain.ContractService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -98,22 +99,30 @@ public class RelayerService {
         User toUser = userRepository.findByWalletAddressIgnoreCase(toAddress)
                 .orElseThrow(() -> new IllegalArgumentException("수신자 지갑을 찾을 수 없습니다."));
 
-        Wallet fromWallet = walletRepository.findAssetWalletByUserIdAndAssetIdWithPessimisticLock(fromUser.getId(), asset.getId())
-                .orElseThrow(() -> new IllegalArgumentException("송신자의 토큰 지갑이 존재하지 않습니다."));
+        // 송신자 → 수신자 순서가 아니라 userId 오름차순으로 잡는다. A→B와 B→A 이전이
+        // 동시에 들어오거나 체결 정산과 겹칠 때 교착이 생기지 않게 정산과 같은 규칙을 따른다.
+        // 잔고 검사는 두 락을 모두 잡은 뒤에 한다. 검사가 실패하면 트랜잭션이 롤백되므로
+        // 그 사이 새로 만든 수신자 지갑도 남지 않는다.
+        Long fromUserId = fromUser.getId();
+        WalletLockOrder.Locked<Wallet> wallets = WalletLockOrder.inUserIdOrder(fromUserId, toUser.getId(),
+                userId -> userId.equals(fromUserId)
+                        ? walletRepository.findAssetWalletByUserIdAndAssetIdWithPessimisticLock(userId, asset.getId())
+                                .orElseThrow(() -> new IllegalArgumentException("송신자의 토큰 지갑이 존재하지 않습니다."))
+                        : walletRepository.findAssetWalletByUserIdAndAssetIdWithPessimisticLock(userId, asset.getId())
+                                .orElseGet(() -> walletRepository.save(
+                                        Wallet.builder()
+                                                .user(toUser)
+                                                .asset(asset)
+                                                .balance(BigDecimal.ZERO)
+                                                .lockedBalance(BigDecimal.ZERO)
+                                                .build()
+                                )));
+        Wallet fromWallet = wallets.first();
+        Wallet toWallet = wallets.second();
 
         if (fromWallet.getBalance().compareTo(amount) < 0) {
             throw new IllegalArgumentException("송신자의 토큰 잔고가 부족합니다.");
         }
-
-        Wallet toWallet = walletRepository.findAssetWalletByUserIdAndAssetIdWithPessimisticLock(toUser.getId(), asset.getId())
-                .orElseGet(() -> walletRepository.save(
-                        Wallet.builder()
-                                .user(toUser)
-                                .asset(asset)
-                                .balance(BigDecimal.ZERO)
-                                .lockedBalance(BigDecimal.ZERO)
-                                .build()
-                ));
 
         fromWallet.updateBalance(fromWallet.getBalance().subtract(amount), fromWallet.getLockedBalance());
         toWallet.updateBalance(toWallet.getBalance().add(amount), toWallet.getLockedBalance());
