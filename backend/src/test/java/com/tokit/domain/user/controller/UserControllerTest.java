@@ -2,6 +2,7 @@ package com.tokit.domain.user.controller;
 
 import com.tokit.support.TestAuthPrincipalResolver;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.tokit.domain.user.entity.Role;
 import com.tokit.domain.user.entity.User;
 import com.tokit.domain.user.service.UserService;
 import com.tokit.global.exception.GlobalExceptionHandler;
@@ -20,6 +21,7 @@ import java.util.List;
 
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
@@ -126,15 +128,58 @@ class UserControllerTest {
     }
 
     @Test
-    @DisplayName("GET /api/users: 전체 사용자 목록 조회가 성공하여 HTTP 200을 반환한다.")
-    void getAllUsers_Success() throws Exception {
+    @DisplayName("GET /api/users/{id}: 다른 사용자의 ID로 조회하면 조회 없이 HTTP 403을 반환한다.")
+    void getUser_OtherUser_Returns403() throws Exception {
+        // When & Then: 인증 주체는 1번, 요청 대상은 2번
+        mockMvc.perform(get("/api/users/2"))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.status").value(403));
+
+        verifyNoInteractions(userService);
+    }
+
+    @Test
+    @DisplayName("GET /api/users/{id}: 관리자는 다른 사용자의 정보도 조회할 수 있다.")
+    void getUser_AdminCanViewOtherUser() throws Exception {
         // Given
+        MockMvc adminMvc = mockMvcAs(99L, Role.ADMIN);
+        when(userService.getUserById(1L)).thenReturn(testUser);
+
+        // When & Then
+        adminMvc.perform(get("/api/users/1"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.id").value(1));
+    }
+
+    @Test
+    @DisplayName("GET /api/users: 관리자가 전체 사용자 목록을 조회하면 HTTP 200을 반환한다.")
+    void getAllUsers_Admin_Success() throws Exception {
+        // Given
+        MockMvc adminMvc = mockMvcAs(99L, Role.ADMIN);
         when(userService.getAllUsers()).thenReturn(List.of(testUser));
 
         // When & Then
-        mockMvc.perform(get("/api/users"))
+        adminMvc.perform(get("/api/users"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.status").value(200))
                 .andExpect(jsonPath("$.data[0].id").value(1));
+    }
+
+    @Test
+    @DisplayName("GET /api/users: 일반 사용자가 전체 사용자 목록을 조회하면 HTTP 403을 반환한다.")
+    void getAllUsers_NonAdmin_Returns403() throws Exception {
+        // When & Then
+        mockMvc.perform(get("/api/users"))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.status").value(403));
+
+        verifyNoInteractions(userService);
+    }
+
+    private MockMvc mockMvcAs(Long userId, Role role) {
+        return MockMvcBuilders.standaloneSetup(userController)
+                .setCustomArgumentResolvers(new TestAuthPrincipalResolver(userId, "as.user@tokit.com", role))
+                .setControllerAdvice(new GlobalExceptionHandler())
+                .build();
     }
 }
