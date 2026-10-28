@@ -55,7 +55,8 @@ public class TradeService {
     // 심볼별 SSE Emitter 리스트 관리
 
     @Transactional
-    public Trade saveTrade(Long buyOrderId, Long sellOrderId, String assetSymbol, BigDecimal price, BigDecimal quantity) {
+    public Trade saveTrade(Long buyOrderId, Long sellOrderId, String assetSymbol, BigDecimal price, BigDecimal quantity,
+                           BigDecimal buyerRemainAfter) {
         Order buyOrder = orderRepository.findById(buyOrderId)
                 .orElseThrow(() -> new IllegalArgumentException("Buy order not found: " + buyOrderId));
         Order sellOrder = orderRepository.findById(sellOrderId)
@@ -82,10 +83,14 @@ public class TradeService {
         Wallet sellerKrwWallet = walletRepository.findKrwWalletByUserIdWithPessimisticLock(sellOrder.getUser().getId())
                 .orElseThrow(() -> new IllegalArgumentException("Seller KRW wallet not found"));
 
-        // 매수자: 주문 시 체결대금과 함께 홀딩해 둔 수수료를 같이 차감
+        // 매수자: 주문 시 지정가 기준으로 홀딩한 금액에서 이번 체결분을 풀고, 실제 비용과의 차액은 환급한다.
+        // 메이커 호가가 지정가보다 낮으면 체결가 차액과 수수료 차액이 남는다.
+        BigDecimal releaseAmount = holdFor(buyOrder.getPrice(), buyerRemainAfter.add(quantity))
+                .subtract(holdFor(buyOrder.getPrice(), buyerRemainAfter));
+        BigDecimal refundAmount = releaseAmount.subtract(totalAmount).subtract(fee);
         buyerKrwWallet.updateBalance(
-                buyerKrwWallet.getBalance(),
-                buyerKrwWallet.getLockedBalance().subtract(totalAmount).subtract(fee));
+                buyerKrwWallet.getBalance().add(refundAmount),
+                buyerKrwWallet.getLockedBalance().subtract(releaseAmount));
         // 매도자: 매도 대금에서 수수료를 제한 금액을 수령
         sellerKrwWallet.updateBalance(
                 sellerKrwWallet.getBalance().add(totalAmount).subtract(fee),
@@ -177,6 +182,18 @@ public class TradeService {
         return tradeRepository.findCandlesBySymbol(symbol).stream()
                 .map(CandleResponse::from)
                 .toList();
+    }
+
+    /**
+     * 잔량 {@code remainQty}에 대해 홀딩되어 있어야 할 금액. 주문 접수·취소와 같은 식을 쓴다.
+     *
+     * <p>체결마다 "직전 잔량의 홀딩액 - 직후 잔량의 홀딩액"을 풀면 합이 최초 홀딩액으로 정확히
+     * 맞아떨어진다. 체결분마다 수수료를 따로 절사하면 절사 오차가 쌓여 전량 체결 뒤에도
+     * 홀딩이 남는다.
+     */
+    private BigDecimal holdFor(BigDecimal orderPrice, BigDecimal remainQty) {
+        BigDecimal amount = orderPrice.multiply(remainQty);
+        return amount.add(feePolicy.calculate(amount));
     }
 
     private void recordFee(Trade trade, com.tokit.domain.user.entity.User user,

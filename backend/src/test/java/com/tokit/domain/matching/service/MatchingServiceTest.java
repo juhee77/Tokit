@@ -138,7 +138,7 @@ class MatchingServiceTest {
         when(orderRepository.findMatchableOrders(eq("PANGYO-STO"), eq(OrderType.SELL), any(), any(), any()))
                 .thenReturn(List.of(sellOrder));
 
-        MatchResult.Match match = new MatchResult.Match(sellOrder, new BigDecimal("10000"), new BigDecimal("10"));
+        MatchResult.Match match = new MatchResult.Match(sellOrder, new BigDecimal("10000"), new BigDecimal("10"), BigDecimal.ZERO);
         MatchResult matchResult = new MatchResult(buyOrder, List.of(match));
 
         when(matchingEngine.match(eq(buyOrder), any())).thenReturn(matchResult);
@@ -148,7 +148,8 @@ class MatchingServiceTest {
 
         // Then
         verify(tradeService, times(1)).saveTrade(
-                eq(100L), eq(200L), eq("PANGYO-STO"), eq(new BigDecimal("10000")), eq(new BigDecimal("10"))
+                eq(100L), eq(200L), eq("PANGYO-STO"), eq(new BigDecimal("10000")), eq(new BigDecimal("10")),
+                eq(BigDecimal.ZERO)
         );
         verify(orderRepository, atLeastOnce()).save(any(Order.class));
 

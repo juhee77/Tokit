@@ -105,7 +105,7 @@ class PostCommitBroadcastTest {
         assertThatThrownBy(() ->
                 transactionTemplate.execute(status -> {
                     tradeService.saveTrade(buyOrder.getId(), sellOrder.getId(),
-                            asset.getSymbol(), BigDecimal.valueOf(10000), BigDecimal.ONE);
+                            asset.getSymbol(), BigDecimal.valueOf(10000), BigDecimal.ONE, BigDecimal.ZERO);
                     // 체결 직후 실패하는 상황. 원장은 롤백되지만, 트랜잭션 안에서 발행했다면
                     // 이벤트는 이미 나간 뒤다.
                     throw new IllegalStateException("체결 직후 장애 재현");
@@ -120,7 +120,7 @@ class PostCommitBroadcastTest {
     void commitPublishesOnChainEventExactlyOnce() {
         transactionTemplate.execute(status ->
                 tradeService.saveTrade(buyOrder.getId(), sellOrder.getId(),
-                        asset.getSymbol(), BigDecimal.valueOf(10000), BigDecimal.ONE));
+                        asset.getSymbol(), BigDecimal.valueOf(10000), BigDecimal.ONE, BigDecimal.ZERO));
 
         verify(orderEventPublisher, times(1)).publishTrade(any());
     }
