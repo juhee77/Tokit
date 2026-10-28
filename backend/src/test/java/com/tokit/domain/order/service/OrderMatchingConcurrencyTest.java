@@ -82,7 +82,7 @@ class OrderMatchingConcurrencyTest {
         walletRepository.deleteAll();
 
         // Mock blockchain operations to prevent actual RPC calls during concurrent matching test
-        doNothing().when(contractService).handleTransferByPartition(any(), any(), any(), any(), any());
+        doNothing().when(contractService).handleTransferByPartition(any(), any(), any(), any(), any(), any());
 
         String uniqueId = java.util.UUID.randomUUID().toString();
         // 2. Setup Issuer & Asset (status: "거래중")

@@ -139,6 +139,7 @@ class AssetServiceTest {
 
         // 3. 온체인 계약 실행
         verify(contractService, times(1)).handleTransferByPartition(
+                eq("0x5FbDB2315678afecb367f032d93F642f64180aa3"), // 종목의 컨트랙트 주소 (#29)
                 eq("TEHERAN-STO"),
                 eq("DEFAULT"),
                 anyString(),

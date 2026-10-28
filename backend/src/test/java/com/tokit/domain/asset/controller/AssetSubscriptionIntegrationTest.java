@@ -132,7 +132,7 @@ class AssetSubscriptionIntegrationTest {
         // 멱등성 키는 매 실행마다 새로 생성합니다. 고정 문자열을 쓰면 @Idempotent가 Redis에
         // 남긴 키(TTL 120초) 때문에 2분 내 재실행 시 중복 요청으로 차단됩니다.
         // blockchain transfer 모킹
-        doNothing().when(contractService).handleTransferByPartition(any(), any(), any(), any(), any());
+        doNothing().when(contractService).handleTransferByPartition(any(), any(), any(), any(), any(), any());
 
         // when & then
         mockMvc.perform(post("/api/assets/TEST-GNPM/subscribe")
@@ -151,6 +151,7 @@ class AssetSubscriptionIntegrationTest {
 
         // 온체인 전송 호출 여부 검증
         verify(contractService).handleTransferByPartition(
+                eq("0x5FbDB2315678afecb367f032d93F642f64180aa3"), // 종목의 컨트랙트 주소 (#29)
                 eq("TEST-GNPM"),
                 eq("DEFAULT"),
                 eq("0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266"),

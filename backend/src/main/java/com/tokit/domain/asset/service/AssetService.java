@@ -141,6 +141,7 @@ public class AssetService {
         // 4. 온체인 토큰 강제 전송 실행 (Admin/Deployer -> User)
         String deployerAddress = "0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266";
         contractService.handleTransferByPartition(
+                asset.getContractAddress(),
                 asset.getSymbol(),
                 "DEFAULT",
                 deployerAddress,
