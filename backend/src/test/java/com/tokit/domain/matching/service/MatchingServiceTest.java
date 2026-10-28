@@ -160,6 +160,21 @@ class MatchingServiceTest {
     }
 
     @Test
+    @DisplayName("matchOrder: DLQ에서 재발행된 이벤트라도 락 획득 후 주문이 이미 체결되었으면 다시 매칭하지 않는다. (#23)")
+    void matchOrder_ReplayedEventForFilledOrder_DoesNotMatchAgain() throws Exception {
+        // 첫 처리가 실제로는 커밋된 뒤 실패로 보고되어 DLQ로 갔고, 관리자가 재발행한 상황.
+        setField(buyOrder, "status", OrderStatus.FILLED);
+        setField(buyOrder, "remainQty", BigDecimal.ZERO);
+        when(assetRepository.findBySymbolForUpdate("PANGYO-STO")).thenReturn(Optional.of(testAsset));
+        when(orderRepository.findByIdWithAsset(buyOrder.getId())).thenReturn(Optional.of(buyOrder));
+
+        matchingService.matchOrder(buyOrder);
+
+        verifyNoInteractions(matchingEngine, tradeService);
+        verify(orderRepository, never()).save(any(Order.class));
+    }
+
+    @Test
     @DisplayName("updateAndBroadcastOrderBook: 매수/매도 호가창을 가격순 정렬 집계하여 Redis 및 STOMP 주제로 전송한다.")
     void updateAndBroadcastOrderBook_Success() {
         // Given
