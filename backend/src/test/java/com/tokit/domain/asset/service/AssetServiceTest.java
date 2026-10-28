@@ -27,6 +27,9 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
+import com.tokit.global.event.PostCommitEvents;
+import org.springframework.context.ApplicationEventPublisher;
+
 import static org.mockito.Mockito.*;
 
 @ExtendWith(MockitoExtension.class)
@@ -49,6 +52,9 @@ class AssetServiceTest {
 
     @Mock
     private SubscriptionRepository subscriptionRepository;
+
+    @Mock
+    private ApplicationEventPublisher eventPublisher;
 
     private User kycUser;
     private User unkycUser;
@@ -121,7 +127,8 @@ class AssetServiceTest {
         // Given
         BigDecimal subscribeAmount = new BigDecimal("1000000"); // 100만원 청약
         when(userRepository.findById(1L)).thenReturn(Optional.of(kycUser));
-        when(assetRepository.findBySymbol("TEHERAN-STO")).thenReturn(Optional.of(subscribingAsset));
+        when(assetRepository.findBySymbolForUpdate("TEHERAN-STO")).thenReturn(Optional.of(subscribingAsset));
+        when(subscriptionRepository.sumTokenQuantityByAsset(10L)).thenReturn(BigDecimal.ZERO);
         when(walletRepository.findKrwWalletByUserIdWithPessimisticLock(1L)).thenReturn(Optional.of(krwWallet));
         when(walletRepository.findAssetWalletByUserIdAndAssetIdWithPessimisticLock(1L, 10L)).thenReturn(Optional.of(tokenWallet));
         when(subscriptionRepository.sumAmountByUserAndIssuer(1L, 7L)).thenReturn(BigDecimal.ZERO);
@@ -137,7 +144,40 @@ class AssetServiceTest {
         // 2. 토큰 100주 (100만원 / 1만원) 지급
         assertThat(tokenWallet.getBalance().stripTrailingZeros()).isEqualTo(new BigDecimal("100").stripTrailingZeros());
 
-        // 3. 온체인 계약 실행
+        // 3. 온체인 배정은 트랜잭션 안에서 실행하지 않고 커밋 이후로 미룬다.
+        verify(contractService, never()).handleTransferByPartition(any(), any(), any(), any(), any());
+        verify(eventPublisher, times(1)).publishEvent(new PostCommitEvents.SubscriptionAllocated(
+                "TEHERAN-STO", kycUser.getWalletAddress(), new BigDecimal("100.0000")));
+    }
+
+    @Test
+    @DisplayName("subscribeAsset: 누적 배정 수량과 신청 수량의 합이 총 발행량을 넘으면 예외가 발생한다.")
+    void subscribeAsset_TotalSupplyExceeded_ThrowsException() {
+        when(userRepository.findById(1L)).thenReturn(Optional.of(kycUser));
+        when(assetRepository.findBySymbolForUpdate("TEHERAN-STO")).thenReturn(Optional.of(subscribingAsset));
+        // 총 발행량 100,000주 중 99,950주가 이미 배정됨 → 잔여 50주
+        when(subscriptionRepository.sumTokenQuantityByAsset(10L)).thenReturn(new BigDecimal("99950"));
+
+        // 100주(100만 원) 청약
+        assertThatThrownBy(() -> assetService.subscribeAsset("TEHERAN-STO", 1L, new BigDecimal("1000000")))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("총 발행량");
+
+        assertThat(krwWallet.getBalance()).isEqualByComparingTo("5000000");
+        verify(subscriptionRepository, never()).save(any());
+        verify(eventPublisher, never()).publishEvent(any(Object.class));
+    }
+
+    @Test
+    @DisplayName("onSubscriptionAllocated: 커밋 후 투자자 지갑으로 온체인 배정을 실행하고, 실패해도 예외를 전파하지 않는다.")
+    void onSubscriptionAllocated_TransfersOnChain() {
+        PostCommitEvents.SubscriptionAllocated event = new PostCommitEvents.SubscriptionAllocated(
+                "TEHERAN-STO", kycUser.getWalletAddress(), new BigDecimal("100.0000"));
+        doThrow(new RuntimeException("rpc down")).when(contractService)
+                .handleTransferByPartition(any(), any(), any(), any(), any());
+
+        assetService.onSubscriptionAllocated(event);
+
         verify(contractService, times(1)).handleTransferByPartition(
                 eq("TEHERAN-STO"),
                 eq("DEFAULT"),
@@ -165,7 +205,8 @@ class AssetServiceTest {
         // Given: 같은 발행인의 다른 종목으로 이미 900만원을 청약해 둔 상태.
         // 종목별 잔고만 보던 예전 검증은 이 경우를 통과시켰습니다.
         when(userRepository.findById(1L)).thenReturn(Optional.of(kycUser));
-        when(assetRepository.findBySymbol("TEHERAN-STO")).thenReturn(Optional.of(subscribingAsset));
+        when(assetRepository.findBySymbolForUpdate("TEHERAN-STO")).thenReturn(Optional.of(subscribingAsset));
+        when(subscriptionRepository.sumTokenQuantityByAsset(10L)).thenReturn(BigDecimal.ZERO);
         when(walletRepository.findKrwWalletByUserIdWithPessimisticLock(1L)).thenReturn(Optional.of(krwWallet));
         when(walletRepository.findAssetWalletByUserIdAndAssetIdWithPessimisticLock(1L, 10L)).thenReturn(Optional.of(tokenWallet));
         when(subscriptionRepository.sumAmountByUserAndIssuer(1L, 7L)).thenReturn(new BigDecimal("9000000"));
@@ -183,7 +224,8 @@ class AssetServiceTest {
     void subscribeAsset_AnnualLimitExceeded_ThrowsException() {
         // Given: 이 발행인에게는 100만원만 청약했지만, 1년간 다른 발행인 포함 총 1,950만원을 청약한 상태
         when(userRepository.findById(1L)).thenReturn(Optional.of(kycUser));
-        when(assetRepository.findBySymbol("TEHERAN-STO")).thenReturn(Optional.of(subscribingAsset));
+        when(assetRepository.findBySymbolForUpdate("TEHERAN-STO")).thenReturn(Optional.of(subscribingAsset));
+        when(subscriptionRepository.sumTokenQuantityByAsset(10L)).thenReturn(BigDecimal.ZERO);
         when(walletRepository.findKrwWalletByUserIdWithPessimisticLock(1L)).thenReturn(Optional.of(krwWallet));
         when(walletRepository.findAssetWalletByUserIdAndAssetIdWithPessimisticLock(1L, 10L)).thenReturn(Optional.of(tokenWallet));
         when(subscriptionRepository.sumAmountByUserAndIssuer(1L, 7L)).thenReturn(new BigDecimal("1000000"));
@@ -227,7 +269,8 @@ class AssetServiceTest {
         setField(proTokenWallet, "id", 301L);
 
         when(userRepository.findById(3L)).thenReturn(Optional.of(professional));
-        when(assetRepository.findBySymbol("TEHERAN-STO")).thenReturn(Optional.of(subscribingAsset));
+        when(assetRepository.findBySymbolForUpdate("TEHERAN-STO")).thenReturn(Optional.of(subscribingAsset));
+        when(subscriptionRepository.sumTokenQuantityByAsset(10L)).thenReturn(BigDecimal.ZERO);
         when(walletRepository.findKrwWalletByUserIdWithPessimisticLock(3L)).thenReturn(Optional.of(proKrwWallet));
         when(walletRepository.findAssetWalletByUserIdAndAssetIdWithPessimisticLock(3L, 10L)).thenReturn(Optional.of(proTokenWallet));
 
