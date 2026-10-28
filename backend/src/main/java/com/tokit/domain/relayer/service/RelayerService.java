@@ -66,9 +66,15 @@ public class RelayerService {
             throw new IllegalArgumentException("전송 수량은 0보다 커야 합니다.");
         }
 
+        if (fromAddress.equalsIgnoreCase(toAddress)) {
+            throw new IllegalArgumentException("송신자와 수신자 지갑 주소가 같습니다.");
+        }
+
+        // 같은 서명이 동시에 들어와도 한 건만 논스 검사를 통과하도록 논스 행을 잠근 채 검증·증가한다.
+        // 행이 아직 없으면 바로 INSERT를 flush해, 동시에 만들려던 다른 요청은 키 충돌로 실패하게 한다.
         String lowerFrom = fromAddress.toLowerCase();
-        RelayerNonce relayerNonce = relayerNonceRepository.findById(lowerFrom)
-                .orElseGet(() -> relayerNonceRepository.save(
+        RelayerNonce relayerNonce = relayerNonceRepository.findByWalletAddressWithPessimisticLock(lowerFrom)
+                .orElseGet(() -> relayerNonceRepository.saveAndFlush(
                         RelayerNonce.builder().walletAddress(lowerFrom).nextNonce(0L).build()
                 ));
 

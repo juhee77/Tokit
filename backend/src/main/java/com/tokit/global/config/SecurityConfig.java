@@ -46,9 +46,10 @@ public class SecurityConfig {
             "/api/trades/**"
     };
 
-    /** 운영자 전용 경로. 자산 발행, 배당 집행, 대사 이력, 계정 권한 변경이 여기 해당합니다. */
+    /** 운영자 전용 경로. 자산 발행, 배당 집행, 대사 이력, 계정 권한 변경, 전체 회원 목록이 여기 해당합니다. */
     private static final String[] ADMIN_ENDPOINTS = {
             "/api/admin/**",
+            "/api/users",
             "/api/users/admin/**",
             "/api/kyc/admin/**",
             "/api/reconciliation/**",
