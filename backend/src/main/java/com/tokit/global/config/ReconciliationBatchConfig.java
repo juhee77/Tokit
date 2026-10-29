@@ -5,6 +5,7 @@ import com.tokit.domain.reconciliation.repository.ReconciliationLogRepository;
 import com.tokit.domain.wallet.entity.Wallet;
 import com.tokit.domain.wallet.repository.WalletRepository;
 import com.tokit.infra.blockchain.BlockchainException;
+import com.tokit.infra.blockchain.ContractNotDeployedException;
 import com.tokit.infra.blockchain.ContractService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -75,8 +76,10 @@ public class ReconciliationBatchConfig extends DefaultBatchConfiguration {
                 .writer(reconciliationLogWriter())
                 // 노드 순단 같은 일시적 조회 실패는 재시도하고, 그래도 실패한 지갑은 불일치로 기록하지 않고
                 // 건너뛴다. 실패가 한도를 넘으면 노드 장애로 보고 잡 자체를 실패시킨다.
+                // 컨트랙트가 배포되지 않은 주소는 다시 시도해도 같으므로 재시도 없이 건너뛴다.
                 .faultTolerant()
                 .retry(BlockchainException.class)
+                .noRetry(ContractNotDeployedException.class)
                 .retryLimit(RPC_RETRY_LIMIT)
                 .skip(BlockchainException.class)
                 .skipLimit(RPC_SKIP_LIMIT)

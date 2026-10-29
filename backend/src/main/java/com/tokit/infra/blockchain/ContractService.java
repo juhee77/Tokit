@@ -21,6 +21,7 @@ import org.web3j.protocol.Web3j;
 import org.web3j.protocol.core.DefaultBlockParameterName;
 import org.web3j.protocol.core.methods.request.Transaction;
 import org.web3j.protocol.core.methods.response.EthCall;
+import org.web3j.protocol.core.methods.response.EthGetCode;
 import org.web3j.protocol.core.methods.response.EthSendTransaction;
 import org.web3j.protocol.core.methods.response.TransactionReceipt;
 import org.web3j.protocol.http.HttpService;
@@ -34,6 +35,8 @@ import java.math.BigInteger;
 import java.nio.charset.StandardCharsets;
 import java.util.Arrays;
 import java.util.List;
+import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 
 @Service
 @Slf4j
@@ -50,6 +53,9 @@ public class ContractService {
 
     private Web3j web3j;
     private Credentials credentials;
+
+    /** 코드가 있는 것으로 확인된 컨트랙트 주소(소문자). 배포된 코드는 사라지지 않으므로 확인은 주소당 한 번이면 된다. */
+    private final Set<String> deployedContracts = ConcurrentHashMap.newKeySet();
 
     @PostConstruct
     public void init() {
@@ -200,6 +206,7 @@ public class ContractService {
      */
     @Retryable(
             retryFor = BlockchainException.class,
+            noRetryFor = ContractNotDeployedException.class,
             maxAttempts = 3,
             backoff = @Backoff(delay = 1000, multiplier = 2.0))
     public void handleTransferByPartition(String targetContractAddress, String symbol, String partition, String from, String to, BigDecimal amount) {
@@ -207,6 +214,8 @@ public class ContractService {
                 targetContractAddress, symbol, partition, from, to, amount);
         
         try {
+            requireDeployedContract(targetContractAddress);
+
             // partition string -> bytes32
             byte[] partitionBytes = new byte[32];
             byte[] sourceBytes = partition.getBytes(StandardCharsets.UTF_8);
@@ -297,6 +306,8 @@ public class ContractService {
         log.info("Checking on-chain balance. Contract: {}, address: {}, partition: {}",
                 targetContractAddress, walletAddress, partition);
         try {
+            requireDeployedContract(targetContractAddress);
+
             byte[] partitionBytes = new byte[32];
             byte[] sourceBytes = partition.getBytes(StandardCharsets.UTF_8);
             System.arraycopy(sourceBytes, 0, partitionBytes, 0, Math.min(sourceBytes.length, 32));
@@ -337,6 +348,42 @@ public class ContractService {
         } catch (Exception e) {
             throw new BlockchainException("Failed to check on-chain balance for address: " + walletAddress, e);
         }
+    }
+
+    /** 설정의 기본 컨트랙트 주소. 로컬 시드 종목이 실제로 배포된 컨트랙트를 가리키게 할 때 쓴다. */
+    public String getDefaultContractAddress() {
+        return contractAddress;
+    }
+
+    /**
+     * 대상 주소에 컨트랙트 코드가 있는지 확인한다.
+     *
+     * <p>코드가 없는 주소로 보낸 트랜잭션은 아무 일도 하지 않고 성공으로 끝나, 이체가 됐다고 착각하게 된다.
+     * 조회도 빈 응답이 와서 잔고 0과 구분되지 않는다. 그래서 이체와 조회 전에 먼저 막는다.
+     */
+    void requireDeployedContract(String address) {
+        if (address == null || address.isBlank()) {
+            throw new ContractNotDeployedException("Contract address is empty");
+        }
+        String key = address.toLowerCase();
+        if (deployedContracts.contains(key)) {
+            return;
+        }
+
+        EthGetCode response;
+        try {
+            response = web3j.ethGetCode(address, DefaultBlockParameterName.LATEST).send();
+        } catch (Exception e) {
+            throw new BlockchainException("Failed to read contract code at " + address, e);
+        }
+        if (response.hasError()) {
+            throw new BlockchainException("eth_getCode failed for " + address + ": " + response.getError().getMessage());
+        }
+        String code = response.getCode();
+        if (code == null || code.isBlank() || "0x".equals(code)) {
+            throw new ContractNotDeployedException("No contract code at " + address);
+        }
+        deployedContracts.add(key);
     }
 
     /**
