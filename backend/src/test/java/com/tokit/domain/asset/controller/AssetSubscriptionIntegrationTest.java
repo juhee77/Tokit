@@ -25,8 +25,8 @@ import org.springframework.transaction.annotation.Transactional;
 import java.math.BigDecimal;
 
 import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doNothing;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -149,15 +149,9 @@ class AssetSubscriptionIntegrationTest {
         Wallet tokenWallet = walletRepository.findAssetWalletByUserIdAndAssetIdWithPessimisticLock(testUser.getId(), testAsset.getId()).orElseThrow();
         org.junit.jupiter.api.Assertions.assertEquals(0, tokenWallet.getBalance().compareTo(BigDecimal.valueOf(20)));
 
-        // 온체인 전송 호출 여부 검증
-        verify(contractService).handleTransferByPartition(
-                eq("0x5FbDB2315678afecb367f032d93F642f64180aa3"), // 종목의 컨트랙트 주소 (#29)
-                eq("TEST-GNPM"),
-                eq("DEFAULT"),
-                eq("0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266"),
-                eq(testUser.getWalletAddress()),
-                eq(BigDecimal.valueOf(20).setScale(4)) // 20.0000
-        );
+        // 온체인 배정은 커밋 이후에 실행된다. 이 테스트의 트랜잭션은 커밋되지 않으므로
+        // 원장은 갱신되었어도 온체인 이체는 아직 일어나지 않아야 한다. (#30)
+        verify(contractService, never()).handleTransferByPartition(any(), any(), any(), any(), any(), any());
     }
 
     @Test

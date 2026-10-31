@@ -10,13 +10,19 @@ import com.tokit.domain.user.repository.UserRepository;
 import com.tokit.domain.wallet.entity.Wallet;
 import com.tokit.domain.wallet.repository.WalletRepository;
 import com.tokit.global.exception.BusinessException;
+import com.tokit.global.event.PostCommitEvents;
 import com.tokit.global.exception.ErrorCode;
 import com.tokit.infra.blockchain.ContractService;
 import com.tokit.domain.issuer.entity.Issuer;
 import com.tokit.domain.issuer.repository.IssuerRepository;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.event.TransactionPhase;
+import org.springframework.transaction.event.TransactionalEventListener;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
@@ -26,7 +32,11 @@ import java.util.List;
 @Service
 @RequiredArgsConstructor
 @Transactional(readOnly = true)
+@Slf4j
 public class AssetService {
+
+    /** 공모 물량을 보유한 배포자 지갑. 청약 배정은 이 지갑에서 투자자에게 강제 이전한다. */
+    private static final String DEPLOYER_ADDRESS = "0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266";
 
     private final AssetRepository assetRepository;
     private final UserRepository userRepository;
@@ -34,6 +44,7 @@ public class AssetService {
     private final ContractService contractService;
     private final IssuerRepository issuerRepository;
     private final SubscriptionRepository subscriptionRepository;
+    private final ApplicationEventPublisher eventPublisher;
 
     @Transactional
     public Asset registerAsset(String symbol, String name, String contractAddress, BigDecimal totalSupply,
@@ -92,11 +103,18 @@ public class AssetService {
             throw new BusinessException("KYC 신원인증이 완료되지 않은 사용자입니다.", ErrorCode.INVALID_INPUT_VALUE);
         }
 
-        Asset asset = getAssetBySymbol(symbol);
+        // 종목 행에 배타 락을 건다. 아래의 "누적 배정 수량 조회 → 검증 → 청약 저장"은
+        // read-modify-write라 락이 없으면 동시 청약이 모두 같은 잔여 물량을 보고 총 발행량을 넘긴다.
+        // 매칭과 같은 순서(종목 → 지갑)로 잡아 교착을 피한다.
+        Asset asset = assetRepository.findBySymbolForUpdate(symbol)
+                .orElseThrow(() -> new BusinessException(ErrorCode.ASSET_NOT_FOUND));
 
         if (!"청약중".equals(asset.getStatus())) {
             throw new BusinessException("현재 청약 진행 중인 자산이 아닙니다.", ErrorCode.INVALID_INPUT_VALUE);
         }
+
+        BigDecimal tokenQuantity = amount.divide(asset.getIssuePrice(), 4, RoundingMode.HALF_UP);
+        verifyTotalSupply(asset, tokenQuantity);
 
         // 1. 원화 예치금 지갑 잠금 및 잔액 차감
         Wallet krwWallet = walletRepository.findKrwWalletByUserIdWithPessimisticLock(userId)
@@ -120,8 +138,6 @@ public class AssetService {
 
         // 3. 잔액 차감 및 영속화
         krwWallet.updateBalance(krwWallet.getBalance().subtract(amount), krwWallet.getLockedBalance());
-        
-        BigDecimal tokenQuantity = amount.divide(asset.getIssuePrice(), 4, RoundingMode.HALF_UP);
         assetWallet.updateBalance(assetWallet.getBalance().add(tokenQuantity), assetWallet.getLockedBalance());
         
         if (assetWallet.getId() == null) {
@@ -138,16 +154,34 @@ public class AssetService {
                 .subscribedAt(LocalDateTime.now())
                 .build());
 
-        // 4. 온체인 토큰 강제 전송 실행 (Admin/Deployer -> User)
-        String deployerAddress = "0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266";
-        contractService.handleTransferByPartition(
-                asset.getContractAddress(),
-                asset.getSymbol(),
-                "DEFAULT",
-                deployerAddress,
-                user.getWalletAddress(),
-                tokenQuantity
-        );
+        // 4. 온체인 배정은 커밋 이후로 미룬다.
+        eventPublisher.publishEvent(new PostCommitEvents.SubscriptionAllocated(
+                asset.getContractAddress(), asset.getSymbol(), user.getWalletAddress(), tokenQuantity));
+    }
+
+    /**
+     * 커밋이 끝나고 락이 풀린 뒤에 온체인 배정을 실행한다.
+     *
+     * <p>여기서 실패하면 원장에는 배정이, 온체인에는 미배정이 남는다. 이미 커밋된 청약을 되돌릴 수 없고
+     * 이 불일치는 일일 대사 배치가 잡아내므로, 실패는 에러 로그로 남기고 요청 스레드로 전파하지 않는다.
+     *
+     * <p>DB를 쓰지 않으므로 클래스의 읽기 전용 트랜잭션을 물려받지 않게 끊는다.
+     */
+    @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
+    @Transactional(propagation = Propagation.NOT_SUPPORTED)
+    public void onSubscriptionAllocated(PostCommitEvents.SubscriptionAllocated event) {
+        try {
+            contractService.handleTransferByPartition(
+                    event.contractAddress(),
+                    event.assetSymbol(),
+                    "DEFAULT",
+                    DEPLOYER_ADDRESS,
+                    event.investorWalletAddress(),
+                    event.tokenQuantity());
+        } catch (RuntimeException e) {
+            log.error("On-chain subscription allocation failed after commit. contract={}, symbol={}, to={}, quantity={}",
+                    event.contractAddress(), event.assetSymbol(), event.investorWalletAddress(), event.tokenQuantity(), e);
+        }
     }
 
     public BigDecimal getAssetCurrentAmount(Asset asset) {
@@ -186,6 +220,18 @@ public class AssetService {
                 row -> (Long) row[1],
                 (v1, v2) -> v1
         ));
+    }
+
+    /** 이번 청약까지 합한 배정 수량이 총 발행량을 넘지 않는지 확인한다. 종목 행 락을 쥔 상태에서 호출해야 한다. */
+    private void verifyTotalSupply(Asset asset, BigDecimal tokenQuantity) {
+        BigDecimal allocated = subscriptionRepository.sumTokenQuantityByAsset(asset.getId());
+        BigDecimal remaining = asset.getTotalSupply().subtract(allocated);
+        if (tokenQuantity.compareTo(remaining) > 0) {
+            throw new BusinessException(
+                    String.format("총 발행량을 초과하여 청약할 수 없습니다. (잔여 물량: %s, 신청 수량: %s)",
+                            remaining.toPlainString(), tokenQuantity.toPlainString()),
+                    ErrorCode.INVALID_INPUT_VALUE);
+        }
     }
 
     /**
