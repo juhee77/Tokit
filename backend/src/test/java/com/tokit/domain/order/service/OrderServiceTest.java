@@ -60,6 +60,9 @@ class OrderServiceTest {
     private OrderEventPublisher orderEventPublisher;
 
     @Mock
+    private org.springframework.context.ApplicationEventPublisher eventPublisher;
+
+    @Mock
     private com.tokit.global.observability.TradingMetrics tradingMetrics;
 
     @Mock
@@ -138,9 +141,9 @@ class OrderServiceTest {
         assertThat(krwWallet.getBalance().stripTrailingZeros()).isEqualTo(new BigDecimal("950000").stripTrailingZeros());
         assertThat(krwWallet.getLockedBalance().stripTrailingZeros()).isEqualTo(new BigDecimal("50000").stripTrailingZeros());
 
-        // 2. 주문 엔티티 영속화 및 RabbitMQ 이벤트 송출 검증
+        // 2. 주문 엔티티 영속화 및 커밋 후 발행용 OrderPlaced 이벤트 송출 검증
         verify(orderRepository, times(1)).save(any(Order.class));
-        verify(orderEventPublisher, times(1)).publishOrder(any());
+        verify(eventPublisher, times(1)).publishEvent(any(com.tokit.global.event.PostCommitEvents.OrderPlaced.class));
     }
 
     @Test
@@ -180,7 +183,7 @@ class OrderServiceTest {
         assertThat(assetWallet.getLockedBalance().stripTrailingZeros()).isEqualTo(new BigDecimal("20").stripTrailingZeros());
 
         verify(orderRepository, times(1)).save(any(Order.class));
-        verify(orderEventPublisher, times(1)).publishOrder(any());
+        verify(eventPublisher, times(1)).publishEvent(any(com.tokit.global.event.PostCommitEvents.OrderPlaced.class));
     }
 
     @Test

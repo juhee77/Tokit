@@ -3,6 +3,8 @@ package com.tokit.domain.user.controller;
 import com.tokit.domain.user.entity.User;
 import com.tokit.domain.user.service.UserService;
 import com.tokit.global.dto.ApiResponse;
+import com.tokit.global.exception.BusinessException;
+import com.tokit.global.exception.ErrorCode;
 import com.tokit.global.security.AuthUser;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -51,8 +53,15 @@ public class UserController {
     }
 
     @GetMapping("/{id}")
-    @Operation(summary = "사용자 조회", description = "사용자 ID로 해당 사용자의 정보를 조회합니다.")
-    public ResponseEntity<ApiResponse<UserResponse>> getUser(@PathVariable("id") Long id) {
+    @Operation(summary = "사용자 조회", description = "사용자 ID로 해당 사용자의 정보를 조회합니다. 본인 또는 관리자만 조회할 수 있습니다.")
+    public ResponseEntity<ApiResponse<UserResponse>> getUser(
+            @AuthenticationPrincipal AuthUser authUser,
+            @PathVariable("id") Long id
+    ) {
+        // 존재 여부를 흘리지 않도록 조회보다 먼저 권한을 검사합니다.
+        if (!authUser.isAdmin() && !authUser.id().equals(id)) {
+            throw new BusinessException(ErrorCode.HANDLE_ACCESS_DENIED);
+        }
         User user = userService.getUserById(id);
         return ResponseEntity.ok(ApiResponse.success(UserResponse.from(user)));
     }
@@ -71,8 +80,12 @@ public class UserController {
     }
 
     @GetMapping
-    @Operation(summary = "전체 사용자 조회", description = "시스템에 등록된 전체 사용자 리스트를 조회합니다.")
-    public ResponseEntity<ApiResponse<List<UserResponse>>> getAllUsers() {
+    @Operation(summary = "[관리자] 전체 사용자 조회", description = "시스템에 등록된 전체 사용자 리스트를 조회합니다.")
+    public ResponseEntity<ApiResponse<List<UserResponse>>> getAllUsers(@AuthenticationPrincipal AuthUser authUser) {
+        // SecurityConfig에서도 ADMIN으로 막지만, 필터 설정이 바뀌어도 개인정보가 새지 않도록 한 번 더 확인합니다.
+        if (!authUser.isAdmin()) {
+            throw new BusinessException(ErrorCode.HANDLE_ACCESS_DENIED);
+        }
         List<UserResponse> list = userService.getAllUsers().stream()
                 .map(UserResponse::from)
                 .toList();

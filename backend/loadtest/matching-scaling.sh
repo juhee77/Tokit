@@ -26,6 +26,7 @@ stop_app(){ PID=$(lsof -ti :18080 2>/dev/null || true); [ -n "$PID" ] && kill $P
 
 start_app(){ cd "$REPO/backend"
              PORT=18080 MANAGEMENT_PORT=18081 \
+               SPRING_PROFILES_ACTIVE="${SPRING_PROFILES_ACTIVE:-loadtest}" \
                SPRING_RABBITMQ_LISTENER_SIMPLE_CONCURRENCY=4 \
                SPRING_RABBITMQ_LISTENER_SIMPLE_MAX_CONCURRENCY=4 \
                java -jar build/libs/backend-0.0.1-SNAPSHOT.jar > $S/app.log 2>&1 &

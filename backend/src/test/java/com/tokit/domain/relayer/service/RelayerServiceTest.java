@@ -153,7 +153,7 @@ class RelayerServiceTest {
                 .nextNonce(0L)
                 .build();
 
-        when(relayerNonceRepository.findById(senderWalletAddress.toLowerCase())).thenReturn(Optional.of(relayerNonce));
+        when(relayerNonceRepository.findByWalletAddressWithPessimisticLock(senderWalletAddress.toLowerCase())).thenReturn(Optional.of(relayerNonce));
         when(assetRepository.findBySymbol("SAMSUNG-STO")).thenReturn(Optional.of(testAsset));
         when(userRepository.findByWalletAddressIgnoreCase(senderWalletAddress)).thenReturn(Optional.of(sender));
         when(userRepository.findByWalletAddressIgnoreCase(receiverWalletAddress)).thenReturn(Optional.of(receiver));
@@ -193,12 +193,25 @@ class RelayerServiceTest {
                 .nextNonce(0L)
                 .build();
 
-        when(relayerNonceRepository.findById(senderWalletAddress.toLowerCase())).thenReturn(Optional.of(relayerNonce));
+        when(relayerNonceRepository.findByWalletAddressWithPessimisticLock(senderWalletAddress.toLowerCase())).thenReturn(Optional.of(relayerNonce));
 
         // When & Then
         assertThatThrownBy(() -> relayerService.verifySignatureAndTransfer(
                 senderWalletAddress, receiverWalletAddress, "SAMSUNG-STO", new BigDecimal("10"), wrongNonce, "0xINVALID"
         )).isInstanceOf(IllegalArgumentException.class)
           .hasMessageContaining("유효하지 않은 논스 값입니다.");
+    }
+
+    @Test
+    @DisplayName("verifySignatureAndTransfer: 송신자와 수신자 주소가 같으면(대소문자 무시) 논스를 조회하기 전에 거부한다.")
+    void verifySignatureAndTransfer_SelfTransfer_ThrowsException() {
+        // When & Then
+        assertThatThrownBy(() -> relayerService.verifySignatureAndTransfer(
+                senderWalletAddress, senderWalletAddress.toUpperCase().replace("0X", "0x"),
+                "SAMSUNG-STO", new BigDecimal("10"), 0L, "0xIGNORED"
+        )).isInstanceOf(IllegalArgumentException.class)
+          .hasMessageContaining("송신자와 수신자 지갑 주소가 같습니다.");
+
+        verifyNoInteractions(relayerNonceRepository, walletRepository, contractService);
     }
 }

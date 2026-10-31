@@ -47,6 +47,8 @@ import static org.mockito.Mockito.verify;
 class PostCommitBroadcastTest {
 
     @Autowired private TradeService tradeService;
+    @Autowired private com.tokit.domain.order.service.OrderService orderService;
+    @Autowired private com.tokit.domain.orderbook.repository.OrderBookLevelRepository orderBookLevelRepository;
     @Autowired private TransactionTemplate transactionTemplate;
     @Autowired private OrderRepository orderRepository;
     @Autowired private TradeRepository tradeRepository;
@@ -60,6 +62,7 @@ class PostCommitBroadcastTest {
     @MockitoBean private ContractService contractService;
 
     private Asset asset;
+    private User buyer;
     private Order buyOrder;
     private Order sellOrder;
 
@@ -75,7 +78,7 @@ class PostCommitBroadcastTest {
                 .totalSupply(BigDecimal.valueOf(10000)).issuePrice(BigDecimal.valueOf(10000))
                 .status("거래중").contractAddress("0xPostCommit").build());
 
-        User buyer = newUser("pcbuyer" + uid.substring(0, 8));
+        buyer = newUser("pcbuyer" + uid.substring(0, 8));
         User seller = newUser("pcseller" + uid.substring(0, 8));
         walletRepository.save(krwWallet(buyer, BigDecimal.valueOf(10_000_000), BigDecimal.valueOf(10_100)));
         walletRepository.save(krwWallet(seller, BigDecimal.ZERO, BigDecimal.ZERO));
@@ -93,6 +96,10 @@ class PostCommitBroadcastTest {
 
     @AfterEach
     void tearDown() {
+        transactionTemplate.execute(status -> {
+            orderBookLevelRepository.deleteByAssetId(asset.getId());
+            return null;
+        });
         tradeFeeRepository.deleteAll();   // trades를 참조하므로 먼저 지운다.
         tradeRepository.deleteAll();
         orderRepository.deleteAll();
@@ -123,6 +130,35 @@ class PostCommitBroadcastTest {
                         asset.getSymbol(), BigDecimal.valueOf(10000), BigDecimal.ONE, BigDecimal.ZERO));
 
         verify(orderEventPublisher, times(1)).publishTrade(any());
+    }
+
+    @Test
+    @DisplayName("주문 트랜잭션이 커밋되기 전에는 매칭 이벤트가 발행되지 않고, 커밋된 직후에만 발행된다 (#19).")
+    void orderEventIsPublishedOnlyAfterTransactionCommits() {
+        transactionTemplate.execute(status -> {
+            orderService.placeOrder(buyer.getId(), asset.getSymbol(),
+                    OrderType.BUY, BigDecimal.valueOf(10000), BigDecimal.ONE);
+            // 아직 커밋 전이므로 RabbitMQ로 메시지가 나가면 안 된다.
+            // 커밋 전에 나가면 컨슈머가 미커밋 주문을 조회해 '주문 없음'으로 DLQ에 보낸다.
+            verify(orderEventPublisher, never()).publishOrder(any());
+            return null;
+        });
+
+        verify(orderEventPublisher, times(1)).publishOrder(any());
+    }
+
+    @Test
+    @DisplayName("주문 트랜잭션이 롤백되면 매칭 이벤트가 발행되지 않는다 (#19).")
+    void orderRollbackMustNotPublishOrderEvent() {
+        assertThatThrownBy(() ->
+                transactionTemplate.execute(status -> {
+                    orderService.placeOrder(buyer.getId(), asset.getSymbol(),
+                            OrderType.BUY, BigDecimal.valueOf(10000), BigDecimal.ONE);
+                    throw new IllegalStateException("주문 직후 롤백 재현");
+                }))
+                .isInstanceOf(IllegalStateException.class);
+
+        verify(orderEventPublisher, never()).publishOrder(any());
     }
 
     private User newUser(String tag) {

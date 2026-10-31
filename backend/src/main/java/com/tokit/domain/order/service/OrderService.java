@@ -13,14 +13,18 @@ import com.tokit.domain.wallet.entity.Wallet;
 import com.tokit.domain.wallet.repository.WalletRepository;
 import com.tokit.domain.fee.service.FeePolicy;
 import com.tokit.domain.orderbook.service.OrderBookService;
+import com.tokit.global.event.PostCommitEvents;
 import com.tokit.global.exception.BusinessException;
 import com.tokit.global.observability.TradingMetrics;
 import com.tokit.global.exception.ErrorCode;
 import com.tokit.infra.rabbitmq.OrderEvent;
 import com.tokit.infra.rabbitmq.OrderEventPublisher;
 import lombok.RequiredArgsConstructor;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.event.TransactionPhase;
+import org.springframework.transaction.event.TransactionalEventListener;
 
 import java.math.BigDecimal;
 import java.util.List;
@@ -39,6 +43,7 @@ public class OrderService {
     private final TradingMetrics tradingMetrics;
     private final FeePolicy feePolicy;
     private final OrderBookService orderBookService;
+    private final ApplicationEventPublisher eventPublisher;
 
     @Transactional
     public Order placeOrder(Long userId, String assetSymbol, OrderType orderType, BigDecimal price, BigDecimal quantity) {
@@ -82,7 +87,9 @@ public class OrderService {
         // 접수 즉시 호가창에 올린다. 매칭은 비동기지만 주문은 이미 체결 대기 상태다.
         orderBookService.addOrder(order);
 
-        // RabbitMQ 주문 등록 이벤트 발행
+        // RabbitMQ 주문 등록 이벤트는 커밋 이후에 발행한다 (#19).
+        // 트랜잭션 안에서 발행하면 커밋 전에 컨슈머가 먼저 소비해 "주문 없음"으로 DLQ에 빠지거나,
+        // 롤백된 주문이 매칭 큐로 나간다.
         OrderEvent event = new OrderEvent(
                 order.getId(),
                 order.getUserId(),
@@ -91,10 +98,17 @@ public class OrderService {
                 order.getPrice(),
                 order.getQuantity()
         );
-        orderEventPublisher.publishOrder(event);
+        eventPublisher.publishEvent(new PostCommitEvents.OrderPlaced(event));
         tradingMetrics.recordOrderPlaced();
 
         return order;
+    }
+
+    /** 주문 트랜잭션이 커밋되어 DB에 주문 행이 확정된 뒤에 RabbitMQ로 발행한다 (#19). */
+    @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
+    @Transactional(propagation = org.springframework.transaction.annotation.Propagation.NOT_SUPPORTED)
+    public void onOrderPlaced(PostCommitEvents.OrderPlaced event) {
+        orderEventPublisher.publishOrder(event.orderEvent());
     }
 
     @Transactional

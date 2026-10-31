@@ -24,6 +24,16 @@ public interface WalletRepository extends JpaRepository<Wallet, Long> {
     // 특정 토큰 자산 지갑 조회를 위한 페이징 메서드 (배당금 Batch 용)
     Page<Wallet> findByAsset_IdAndBalanceGreaterThan(Long assetId, BigDecimal balance, Pageable pageable);
 
+    /**
+     * 배당 대상 주주 조회 (#28).
+     * 매도 주문을 걸어둔 수량(lockedBalance)도 체결 전까지는 해당 주주의 보유분이므로
+     * 가용 잔고(balance)와 홀딩 잔고(lockedBalance)의 합이 0보다 큰 모든 지갑을 읽는다.
+     */
+    @Query("SELECT w FROM Wallet w WHERE w.asset.id = :assetId AND (w.balance + w.lockedBalance) > :minTotal")
+    Page<Wallet> findActiveHoldersByAssetId(@Param("assetId") Long assetId,
+                                            @Param("minTotal") BigDecimal minTotal,
+                                            Pageable pageable);
+
     // 원화(KRW) 지갑 조회를 위한 메서드 (asset_id IS NULL)
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("SELECT w FROM Wallet w WHERE w.user.id = :userId AND w.asset IS NULL")
@@ -39,17 +49,17 @@ public interface WalletRepository extends JpaRepository<Wallet, Long> {
 
     Optional<Wallet> findByUserIdAndAssetId(Long userId, Long assetId);
 
-    @Query("SELECT COALESCE(SUM(w.balance), 0) FROM Wallet w WHERE w.asset.id = :assetId")
+    @Query("SELECT COALESCE(SUM(w.balance + w.lockedBalance), 0) FROM Wallet w WHERE w.asset.id = :assetId")
     BigDecimal sumBalanceByAssetId(@Param("assetId") Long assetId);
 
-    @Query("SELECT COUNT(DISTINCT w.user.id) FROM Wallet w WHERE w.asset.id = :assetId")
+    @Query("SELECT COUNT(DISTINCT w.user.id) FROM Wallet w WHERE w.asset.id = :assetId AND (w.balance + w.lockedBalance) > 0")
     long countInvestorsByAssetId(@Param("assetId") Long assetId);
 
     List<Wallet> findByAsset_IdAndBalanceGreaterThanOrderByBalanceDesc(Long assetId, BigDecimal balance);
 
-    @Query("SELECT w.asset.id, COALESCE(SUM(w.balance), 0) FROM Wallet w WHERE w.asset IS NOT NULL GROUP BY w.asset.id")
+    @Query("SELECT w.asset.id, COALESCE(SUM(w.balance + w.lockedBalance), 0) FROM Wallet w WHERE w.asset IS NOT NULL GROUP BY w.asset.id")
     List<Object[]> sumBalancesGroupByAssetId();
 
-    @Query("SELECT w.asset.id, COUNT(DISTINCT w.user.id) FROM Wallet w WHERE w.asset IS NOT NULL GROUP BY w.asset.id")
+    @Query("SELECT w.asset.id, COUNT(DISTINCT w.user.id) FROM Wallet w WHERE w.asset IS NOT NULL AND (w.balance + w.lockedBalance) > 0 GROUP BY w.asset.id")
     List<Object[]> countInvestorsGroupByAssetId();
 }

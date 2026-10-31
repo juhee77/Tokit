@@ -141,7 +141,7 @@ class RelayerControllerTest {
         Wallet senderWallet = Wallet.builder().user(sender).asset(testAsset).balance(BigDecimal.valueOf(500)).lockedBalance(BigDecimal.ZERO).build();
         Wallet receiverWallet = Wallet.builder().user(receiver).asset(testAsset).balance(BigDecimal.ZERO).lockedBalance(BigDecimal.ZERO).build();
 
-        when(relayerNonceRepository.findById(sender.getWalletAddress().toLowerCase())).thenReturn(Optional.of(relayerNonce));
+        when(relayerNonceRepository.findByWalletAddressWithPessimisticLock(sender.getWalletAddress().toLowerCase())).thenReturn(Optional.of(relayerNonce));
         when(assetRepository.findBySymbol(testAsset.getSymbol())).thenReturn(Optional.of(testAsset));
         when(userRepository.findByWalletAddressIgnoreCase(sender.getWalletAddress())).thenReturn(Optional.of(sender));
         when(userRepository.findByWalletAddressIgnoreCase(receiver.getWalletAddress())).thenReturn(Optional.of(receiver));
@@ -211,7 +211,7 @@ class RelayerControllerTest {
 
         Wallet senderWallet = Wallet.builder().user(sender).asset(testAsset).balance(BigDecimal.valueOf(500)).lockedBalance(BigDecimal.ZERO).build();
 
-        when(relayerNonceRepository.findById(sender.getWalletAddress().toLowerCase())).thenReturn(Optional.of(relayerNonce));
+        when(relayerNonceRepository.findByWalletAddressWithPessimisticLock(sender.getWalletAddress().toLowerCase())).thenReturn(Optional.of(relayerNonce));
 
         // When & Then
         IllegalArgumentException exception = assertThrows(IllegalArgumentException.class, () -> {

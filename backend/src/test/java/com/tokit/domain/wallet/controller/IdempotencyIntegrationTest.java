@@ -27,6 +27,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 @SpringBootTest
 class IdempotencyIntegrationTest {
@@ -129,6 +130,79 @@ class IdempotencyIntegrationTest {
         assertThat(successCount.get()).isEqualTo(1); // 오직 1개의 요청만 성공해야 함
         
         // 잔고 검증: 50,000원이 정확히 1번만 충전되어야 함
+        Wallet wallet = walletRepository.findKrwWalletByUserId(testUser.getId()).orElseThrow();
+        assertThat(wallet.getBalance().stripTrailingZeros())
+                .isEqualTo(new BigDecimal("50000").stripTrailingZeros());
+    }
+
+    @Test
+    @DisplayName("멱등성: 다른 사용자가 같은 Idempotency-Key를 보내도 남의 응답을 받지 않고 자기 요청이 실행된다.")
+    void depositKrw_SameKeyDifferentUser_DoesNotReplayOthersResponse() throws Exception {
+        // given: 두 번째 사용자와 그 사용자의 인증 주체로 동작하는 MockMvc
+        String uniqueId = UUID.randomUUID().toString();
+        User otherUser = userRepository.save(User.builder()
+                .name("Other User")
+                .email("other-" + uniqueId + "@tokit.com")
+                .walletAddress("0xOTHER-" + uniqueId.substring(0, 10))
+                .password("{noop}test-password")
+                .kycStatus(true)
+                .build());
+        walletRepository.save(Wallet.builder()
+                .user(otherUser)
+                .asset(null)
+                .balance(BigDecimal.ZERO)
+                .lockedBalance(BigDecimal.ZERO)
+                .build());
+        MockMvc otherMockMvc = MockMvcBuilders.standaloneSetup(walletController)
+                .setCustomArgumentResolvers(
+                        new TestAuthPrincipalResolver(otherUser.getId(), otherUser.getEmail()))
+                .setControllerAdvice(new GlobalExceptionHandler())
+                .build();
+
+        String sharedKey = UUID.randomUUID().toString();
+
+        // when: 같은 키로 각자 충전한다.
+        mockMvc.perform(post("/api/wallets/deposit")
+                        .header("X-Idempotency-Key", sharedKey)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(
+                                new WalletController.WalletAmountRequest(new BigDecimal("50000")))))
+                .andExpect(status().isOk());
+        otherMockMvc.perform(post("/api/wallets/deposit")
+                        .header("X-Idempotency-Key", sharedKey)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(
+                                new WalletController.WalletAmountRequest(new BigDecimal("30000")))))
+                .andExpect(status().isOk());
+
+        // then: 두 번째 사용자의 충전도 실제로 반영되어야 한다.
+        //       (키 범위가 사용자로 나뉘지 않으면 첫 사용자의 캐시 응답만 받고 충전되지 않는다)
+        Wallet mine = walletRepository.findKrwWalletByUserId(testUser.getId()).orElseThrow();
+        Wallet others = walletRepository.findKrwWalletByUserId(otherUser.getId()).orElseThrow();
+        assertThat(mine.getBalance().stripTrailingZeros())
+                .isEqualTo(new BigDecimal("50000").stripTrailingZeros());
+        assertThat(others.getBalance().stripTrailingZeros())
+                .isEqualTo(new BigDecimal("30000").stripTrailingZeros());
+    }
+
+    @Test
+    @DisplayName("멱등성: 같은 Idempotency-Key로 금액이 다른 요청을 보내면 422로 거부하고 충전하지 않는다.")
+    void depositKrw_SameKeyDifferentBody_Returns422() throws Exception {
+        String key = UUID.randomUUID().toString();
+
+        mockMvc.perform(post("/api/wallets/deposit")
+                        .header("X-Idempotency-Key", key)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(
+                                new WalletController.WalletAmountRequest(new BigDecimal("50000")))))
+                .andExpect(status().isOk());
+        mockMvc.perform(post("/api/wallets/deposit")
+                        .header("X-Idempotency-Key", key)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(
+                                new WalletController.WalletAmountRequest(new BigDecimal("90000")))))
+                .andExpect(status().is(422));
+
         Wallet wallet = walletRepository.findKrwWalletByUserId(testUser.getId()).orElseThrow();
         assertThat(wallet.getBalance().stripTrailingZeros())
                 .isEqualTo(new BigDecimal("50000").stripTrailingZeros());
