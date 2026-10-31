@@ -44,5 +44,5 @@ public final class PostCommitEvents {
      * <p>온체인 이체는 영수증 폴링으로 수십 초까지 걸릴 수 있어, 트랜잭션 안에서 하면 종목·지갑 락을
      * 그동안 쥐고 있게 되고, 이체 성공 후 커밋이 실패하면 온체인에만 토큰이 남는다.
      */
-    public record SubscriptionAllocated(String assetSymbol, String investorWalletAddress, BigDecimal tokenQuantity) {}
+    public record SubscriptionAllocated(String contractAddress, String assetSymbol, String investorWalletAddress, BigDecimal tokenQuantity) {}
 }

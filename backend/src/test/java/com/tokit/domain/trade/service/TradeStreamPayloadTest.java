@@ -73,7 +73,7 @@ class TradeStreamPayloadTest {
 
     @BeforeEach
     void setUp() {
-        doNothing().when(contractService).handleTransferByPartition(any(), any(), any(), any(), any());
+        doNothing().when(contractService).handleTransferByPartition(any(), any(), any(), any(), any(), any());
 
         String uid = UUID.randomUUID().toString().substring(0, 8);
         Issuer issuer = issuerRepository.save(Issuer.builder()

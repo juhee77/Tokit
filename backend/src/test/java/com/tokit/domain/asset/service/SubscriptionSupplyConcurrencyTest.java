@@ -30,6 +30,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 
@@ -148,6 +149,6 @@ class SubscriptionSupplyConcurrencyTest {
         assertThat(allocated).isEqualByComparingTo(TOTAL_SUPPLY);
         assertThat(succeeded.get()).isEqualTo(5);
         // 온체인 배정은 커밋된 청약에 대해서만, 커밋 이후에 실행된다.
-        verify(contractService, times(5)).handleTransferByPartition(any(), any(), any(), any(), any());
+        verify(contractService, times(5)).handleTransferByPartition(eq("0xSupplyCapContract"), any(), any(), any(), any(), any());;
     }
 }

@@ -145,9 +145,9 @@ class AssetServiceTest {
         assertThat(tokenWallet.getBalance().stripTrailingZeros()).isEqualTo(new BigDecimal("100").stripTrailingZeros());
 
         // 3. 온체인 배정은 트랜잭션 안에서 실행하지 않고 커밋 이후로 미룬다.
-        verify(contractService, never()).handleTransferByPartition(any(), any(), any(), any(), any());
+        verify(contractService, never()).handleTransferByPartition(any(), any(), any(), any(), any(), any());
         verify(eventPublisher, times(1)).publishEvent(new PostCommitEvents.SubscriptionAllocated(
-                "TEHERAN-STO", kycUser.getWalletAddress(), new BigDecimal("100.0000")));
+                "0x5FbDB2315678afecb367f032d93F642f64180aa3", "TEHERAN-STO", kycUser.getWalletAddress(), new BigDecimal("100.0000")));
     }
 
     @Test
@@ -172,13 +172,14 @@ class AssetServiceTest {
     @DisplayName("onSubscriptionAllocated: 커밋 후 투자자 지갑으로 온체인 배정을 실행하고, 실패해도 예외를 전파하지 않는다.")
     void onSubscriptionAllocated_TransfersOnChain() {
         PostCommitEvents.SubscriptionAllocated event = new PostCommitEvents.SubscriptionAllocated(
-                "TEHERAN-STO", kycUser.getWalletAddress(), new BigDecimal("100.0000"));
+                "0x5FbDB2315678afecb367f032d93F642f64180aa3", "TEHERAN-STO", kycUser.getWalletAddress(), new BigDecimal("100.0000"));
         doThrow(new RuntimeException("rpc down")).when(contractService)
-                .handleTransferByPartition(any(), any(), any(), any(), any());
+                .handleTransferByPartition(any(), any(), any(), any(), any(), any());
 
         assetService.onSubscriptionAllocated(event);
 
         verify(contractService, times(1)).handleTransferByPartition(
+                eq("0x5FbDB2315678afecb367f032d93F642f64180aa3"), // 종목의 컨트랙트 주소 (#29)
                 eq("TEHERAN-STO"),
                 eq("DEFAULT"),
                 anyString(),

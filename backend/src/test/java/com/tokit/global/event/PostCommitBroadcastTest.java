@@ -68,7 +68,7 @@ class PostCommitBroadcastTest {
 
     @BeforeEach
     void setUp() {
-        doNothing().when(contractService).handleTransferByPartition(any(), any(), any(), any(), any());
+        doNothing().when(contractService).handleTransferByPartition(any(), any(), any(), any(), any(), any());
 
         String uid = UUID.randomUUID().toString();
         Issuer issuer = issuerRepository.save(Issuer.builder()

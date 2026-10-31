@@ -156,7 +156,7 @@ public class AssetService {
 
         // 4. 온체인 배정은 커밋 이후로 미룬다.
         eventPublisher.publishEvent(new PostCommitEvents.SubscriptionAllocated(
-                asset.getSymbol(), user.getWalletAddress(), tokenQuantity));
+                asset.getContractAddress(), asset.getSymbol(), user.getWalletAddress(), tokenQuantity));
     }
 
     /**
@@ -172,14 +172,15 @@ public class AssetService {
     public void onSubscriptionAllocated(PostCommitEvents.SubscriptionAllocated event) {
         try {
             contractService.handleTransferByPartition(
+                    event.contractAddress(),
                     event.assetSymbol(),
                     "DEFAULT",
                     DEPLOYER_ADDRESS,
                     event.investorWalletAddress(),
                     event.tokenQuantity());
         } catch (RuntimeException e) {
-            log.error("On-chain subscription allocation failed after commit. symbol={}, to={}, quantity={}",
-                    event.assetSymbol(), event.investorWalletAddress(), event.tokenQuantity(), e);
+            log.error("On-chain subscription allocation failed after commit. contract={}, symbol={}, to={}, quantity={}",
+                    event.contractAddress(), event.assetSymbol(), event.investorWalletAddress(), event.tokenQuantity(), e);
         }
     }
 

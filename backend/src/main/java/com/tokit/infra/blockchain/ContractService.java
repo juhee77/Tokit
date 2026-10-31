@@ -21,6 +21,7 @@ import org.web3j.protocol.Web3j;
 import org.web3j.protocol.core.DefaultBlockParameterName;
 import org.web3j.protocol.core.methods.request.Transaction;
 import org.web3j.protocol.core.methods.response.EthCall;
+import org.web3j.protocol.core.methods.response.EthGetCode;
 import org.web3j.protocol.core.methods.response.EthSendTransaction;
 import org.web3j.protocol.core.methods.response.TransactionReceipt;
 import org.web3j.protocol.http.HttpService;
@@ -34,6 +35,8 @@ import java.math.BigInteger;
 import java.nio.charset.StandardCharsets;
 import java.util.Arrays;
 import java.util.List;
+import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 
 @Service
 @Slf4j
@@ -50,6 +53,9 @@ public class ContractService {
 
     private Web3j web3j;
     private Credentials credentials;
+
+    /** 코드가 있는 것으로 확인된 컨트랙트 주소(소문자). 배포된 코드는 사라지지 않으므로 확인은 주소당 한 번이면 된다. */
+    private final Set<String> deployedContracts = ConcurrentHashMap.newKeySet();
 
     @PostConstruct
     public void init() {
@@ -194,13 +200,13 @@ public class ContractService {
     /**
      * 블록체인 네트워크 상에서 STO 토큰 전송(Partition-based transfer) 이벤트를 처리
      * 여기서는 Admin(Owner) 권한으로 forceTransferByPartition을 직접 날려서 온체인 잔고 동기화를 수행
+     *
+     * <p>종목마다 컨트랙트가 다르므로 대상 주소를 반드시 받는다. 설정의 기본 주소로 보내면
+     * 다른 종목의 토큰이 이체된다. (#29)
      */
-    public void handleTransferByPartition(String symbol, String partition, String from, String to, BigDecimal amount) {
-        handleTransferByPartition(this.contractAddress, symbol, partition, from, to, amount);
-    }
-
     @Retryable(
             retryFor = BlockchainException.class,
+            noRetryFor = ContractNotDeployedException.class,
             maxAttempts = 3,
             backoff = @Backoff(delay = 1000, multiplier = 2.0))
     public void handleTransferByPartition(String targetContractAddress, String symbol, String partition, String from, String to, BigDecimal amount) {
@@ -208,6 +214,8 @@ public class ContractService {
                 targetContractAddress, symbol, partition, from, to, amount);
         
         try {
+            requireDeployedContract(targetContractAddress);
+
             // partition string -> bytes32
             byte[] partitionBytes = new byte[32];
             byte[] sourceBytes = partition.getBytes(StandardCharsets.UTF_8);
@@ -290,10 +298,16 @@ public class ContractService {
 
     /**
      * 특정 주주(지갑)의 온체인 파티션 토큰 잔고 조회
+     *
+     * <p>조회에 실패하면 0이 아니라 {@link BlockchainException}을 던진다. 0을 돌려주면 노드 순단 시
+     * 모든 주주의 온체인 잔고가 0으로 읽혀, 대사 배치가 전 주주를 불일치로 경보한다. (#29)
      */
-    public BigDecimal balanceOfByPartition(String symbol, String partition, String walletAddress) {
-        log.info("Checking on-chain balance for address: {}, partition: {}", walletAddress, partition);
+    public BigDecimal balanceOfByPartition(String targetContractAddress, String partition, String walletAddress) {
+        log.info("Checking on-chain balance. Contract: {}, address: {}, partition: {}",
+                targetContractAddress, walletAddress, partition);
         try {
+            requireDeployedContract(targetContractAddress);
+
             byte[] partitionBytes = new byte[32];
             byte[] sourceBytes = partition.getBytes(StandardCharsets.UTF_8);
             System.arraycopy(sourceBytes, 0, partitionBytes, 0, Math.min(sourceBytes.length, 32));
@@ -312,23 +326,64 @@ public class ContractService {
             EthCall response = web3j.ethCall(
                     Transaction.createEthCallTransaction(
                             credentials.getAddress(),
-                            contractAddress,
+                            targetContractAddress,
                             encodedFunction
                     ),
                     DefaultBlockParameterName.LATEST
             ).send();
 
+            if (response.hasError()) {
+                throw new BlockchainException("balanceOfByPartition call failed: " + response.getError().getMessage());
+            }
             List<Type> results = FunctionReturnDecoder.decode(response.getValue(), function.getOutputParameters());
             if (results.isEmpty()) {
-                return BigDecimal.ZERO;
+                // 컨트랙트가 없는 주소이거나 응답이 비어 있다. 잔고 0과 구분해야 한다.
+                throw new BlockchainException("balanceOfByPartition returned no value from contract " + targetContractAddress);
             }
             BigInteger rawBalance = (BigInteger) results.get(0).getValue();
             // 18자리 온체인 단위를 4자리 소수점 단위로 나누어 리턴
             return new BigDecimal(rawBalance).divide(BigDecimal.valueOf(10).pow(18));
+        } catch (BlockchainException e) {
+            throw e;
         } catch (Exception e) {
-            log.error("Failed to check on-chain balance on blockchain for address: " + walletAddress, e);
-            return BigDecimal.ZERO;
+            throw new BlockchainException("Failed to check on-chain balance for address: " + walletAddress, e);
         }
+    }
+
+    /** 설정의 기본 컨트랙트 주소. 로컬 시드 종목이 실제로 배포된 컨트랙트를 가리키게 할 때 쓴다. */
+    public String getDefaultContractAddress() {
+        return contractAddress;
+    }
+
+    /**
+     * 대상 주소에 컨트랙트 코드가 있는지 확인한다.
+     *
+     * <p>코드가 없는 주소로 보낸 트랜잭션은 아무 일도 하지 않고 성공으로 끝나, 이체가 됐다고 착각하게 된다.
+     * 조회도 빈 응답이 와서 잔고 0과 구분되지 않는다. 그래서 이체와 조회 전에 먼저 막는다.
+     */
+    void requireDeployedContract(String address) {
+        if (address == null || address.isBlank()) {
+            throw new ContractNotDeployedException("Contract address is empty");
+        }
+        String key = address.toLowerCase();
+        if (deployedContracts.contains(key)) {
+            return;
+        }
+
+        EthGetCode response;
+        try {
+            response = web3j.ethGetCode(address, DefaultBlockParameterName.LATEST).send();
+        } catch (Exception e) {
+            throw new BlockchainException("Failed to read contract code at " + address, e);
+        }
+        if (response.hasError()) {
+            throw new BlockchainException("eth_getCode failed for " + address + ": " + response.getError().getMessage());
+        }
+        String code = response.getCode();
+        if (code == null || code.isBlank() || "0x".equals(code)) {
+            throw new ContractNotDeployedException("No contract code at " + address);
+        }
+        deployedContracts.add(key);
     }
 
     /**

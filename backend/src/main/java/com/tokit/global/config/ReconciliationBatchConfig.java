@@ -4,6 +4,8 @@ import com.tokit.domain.reconciliation.entity.ReconciliationLog;
 import com.tokit.domain.reconciliation.repository.ReconciliationLogRepository;
 import com.tokit.domain.wallet.entity.Wallet;
 import com.tokit.domain.wallet.repository.WalletRepository;
+import com.tokit.infra.blockchain.BlockchainException;
+import com.tokit.infra.blockchain.ContractNotDeployedException;
 import com.tokit.infra.blockchain.ContractService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -33,6 +35,9 @@ import java.util.Map;
 @Configuration
 @Slf4j
 public class ReconciliationBatchConfig extends DefaultBatchConfiguration {
+
+    private static final int RPC_RETRY_LIMIT = 3;
+    private static final int RPC_SKIP_LIMIT = 20;
 
     private final WalletRepository walletRepository;
     private final ReconciliationLogRepository reconciliationLogRepository;
@@ -69,6 +74,15 @@ public class ReconciliationBatchConfig extends DefaultBatchConfiguration {
                 .reader(walletReader())
                 .processor(walletProcessor())
                 .writer(reconciliationLogWriter())
+                // 노드 순단 같은 일시적 조회 실패는 재시도하고, 그래도 실패한 지갑은 불일치로 기록하지 않고
+                // 건너뛴다. 실패가 한도를 넘으면 노드 장애로 보고 잡 자체를 실패시킨다.
+                // 컨트랙트가 배포되지 않은 주소는 다시 시도해도 같으므로 재시도 없이 건너뛴다.
+                .faultTolerant()
+                .retry(BlockchainException.class)
+                .noRetry(ContractNotDeployedException.class)
+                .retryLimit(RPC_RETRY_LIMIT)
+                .skip(BlockchainException.class)
+                .skipLimit(RPC_SKIP_LIMIT)
                 .build();
     }
 
@@ -92,8 +106,10 @@ public class ReconciliationBatchConfig extends DefaultBatchConfiguration {
             // 1. RDBMS 상의 총 보유량 = 가용잔고 + 락된잔고
             BigDecimal offchainBalance = wallet.getBalance().add(wallet.getLockedBalance());
             
-            // 2. 스마트 컨트랙트 상의 온체인 잔고 조회 (DEFAULT 파티션 기준)
-            BigDecimal onchainBalance = contractService.balanceOfByPartition(symbol, "DEFAULT", walletAddress);
+            // 2. 해당 종목 컨트랙트의 온체인 잔고 조회 (DEFAULT 파티션 기준)
+            //    조회 실패는 BlockchainException으로 올라와 step의 재시도·스킵 정책을 따른다.
+            BigDecimal onchainBalance = contractService.balanceOfByPartition(
+                    wallet.getAsset().getContractAddress(), "DEFAULT", walletAddress);
             
             // 3. 정합성 대조
             BigDecimal difference = offchainBalance.subtract(onchainBalance).abs();

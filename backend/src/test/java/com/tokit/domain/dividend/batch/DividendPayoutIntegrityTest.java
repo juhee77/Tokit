@@ -69,7 +69,7 @@ class DividendPayoutIntegrityTest {
 
     @BeforeEach
     void setUp() {
-        doNothing().when(contractService).handleTransferByPartition(any(), any(), any(), any(), any());
+        doNothing().when(contractService).handleTransferByPartition(any(), any(), any(), any(), any(), any());
         issuer = issuerRepository.save(Issuer.builder()
                 .companyName("Dividend Test Issuer")
                 .bizRegNo("div-" + UUID.randomUUID())
