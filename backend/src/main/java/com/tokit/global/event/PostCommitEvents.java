@@ -3,6 +3,8 @@ package com.tokit.global.event;
 import com.tokit.infra.rabbitmq.OrderEvent;
 import com.tokit.infra.rabbitmq.TradeEvent;
 
+import java.math.BigDecimal;
+
 /**
  * 커밋 이후에만 외부로 내보내야 하는 사건들.
  *
@@ -35,4 +37,12 @@ public final class PostCommitEvents {
 
     /** 체결이 확정되었다. 커밋 후 온체인 동기화 발행과 실시간 스트리밍을 수행한다. */
     public record TradeSettled(Long tradeId, String assetSymbol, TradeEvent onChainEvent) {}
+
+    /**
+     * 공모 청약이 확정되었다. 커밋 후 발행 물량을 투자자 지갑으로 온체인 배정한다. (#30)
+     *
+     * <p>온체인 이체는 영수증 폴링으로 수십 초까지 걸릴 수 있어, 트랜잭션 안에서 하면 종목·지갑 락을
+     * 그동안 쥐고 있게 되고, 이체 성공 후 커밋이 실패하면 온체인에만 토큰이 남는다.
+     */
+    public record SubscriptionAllocated(String assetSymbol, String investorWalletAddress, BigDecimal tokenQuantity) {}
 }
