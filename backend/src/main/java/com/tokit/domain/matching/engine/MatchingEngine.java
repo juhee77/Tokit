@@ -55,7 +55,8 @@ public class MatchingEngine {
             incomingOrder.updateRemainingQuantity(matchQuantity);
             maker.updateRemainingQuantity(matchQuantity);
 
-            matches.add(new MatchResult.Match(maker, matchPrice, matchQuantity));
+            matches.add(new MatchResult.Match(maker, matchPrice, matchQuantity,
+                    incomingOrder.getRemainingQuantity()));
         }
 
         return new MatchResult(incomingOrder, matches);

@@ -152,7 +152,7 @@ class TradeWalletLockOrderTest {
                         Long buyOrderId, Long sellOrderId, String symbol) {
         try {
             start.await();
-            tradeService.saveTrade(buyOrderId, sellOrderId, symbol, PRICE, QTY);
+            tradeService.saveTrade(buyOrderId, sellOrderId, symbol, PRICE, QTY, BigDecimal.ZERO);
         } catch (Exception e) {
             failures.add(e);
         } finally {
