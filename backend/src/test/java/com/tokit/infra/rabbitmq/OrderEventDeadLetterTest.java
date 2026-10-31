@@ -8,6 +8,8 @@ import com.tokit.domain.matching.service.MatchingService;
 import com.tokit.domain.order.entity.Order;
 import com.tokit.domain.order.entity.OrderStatus;
 import com.tokit.domain.order.entity.OrderType;
+import com.tokit.domain.order.entity.FailedOrderEvent;
+import com.tokit.domain.order.repository.FailedOrderEventRepository;
 import com.tokit.domain.order.repository.OrderRepository;
 import com.tokit.domain.user.entity.User;
 import com.tokit.domain.user.repository.UserRepository;
@@ -27,6 +29,7 @@ import org.springframework.test.context.bean.override.mockito.MockitoSpyBean;
 import java.math.BigDecimal;
 
 import static java.util.concurrent.TimeUnit.SECONDS;
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.awaitility.Awaitility.await;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.contains;
@@ -59,6 +62,7 @@ class OrderEventDeadLetterTest {
     @Autowired private UserRepository userRepository;
     @Autowired private AssetRepository assetRepository;
     @Autowired private IssuerRepository issuerRepository;
+    @Autowired private FailedOrderEventRepository failedOrderEventRepository;
 
     /** 매칭을 항상 실패시켜 "처리 불가능한 주문" 상황을 만든다. */
     @MockitoBean private MatchingService matchingService;
@@ -115,6 +119,14 @@ class OrderEventDeadLetterTest {
                 verify(slackAlertService, atLeastOnce()).sendAlert(
                         eq("주문 매칭 실패 (DLQ)"),
                         contains(String.valueOf(orderId))));
+
+        // 알림을 놓쳐도 복구할 수 있도록 DLQ 메시지는 버려지기 전에 적재되어야 한다. (#23)
+        await().atMost(20, SECONDS).untilAsserted(() ->
+                assertThat(failedOrderEventRepository
+                        .findFirstByOrderIdAndStatusNot(orderId, FailedOrderEvent.Status.RESOLVED))
+                        .get()
+                        .extracting(FailedOrderEvent::getStatus)
+                        .isEqualTo(FailedOrderEvent.Status.PENDING));
     }
 
     @Test

@@ -29,7 +29,9 @@ public enum ErrorCode {
     ORDER_NOT_FOUND(HttpStatus.NOT_FOUND, "O001", " Order not found"),
     INVALID_ORDER_PRICE(HttpStatus.BAD_REQUEST, "O002", " Invalid order price"),
     INVALID_ORDER_QUANTITY(HttpStatus.BAD_REQUEST, "O003", " Invalid order quantity"),
-    ORDER_ALREADY_CLOSED(HttpStatus.CONFLICT, "O004", " Order is already filled or canceled");
+    ORDER_ALREADY_CLOSED(HttpStatus.CONFLICT, "O004", " Order is already filled or canceled"),
+    FAILED_ORDER_EVENT_NOT_FOUND(HttpStatus.NOT_FOUND, "O005", " Failed order event not found"),
+    FAILED_ORDER_EVENT_ALREADY_RESOLVED(HttpStatus.CONFLICT, "O006", " Failed order event is already resolved");
 
     private final HttpStatus status;
     private final String code;
