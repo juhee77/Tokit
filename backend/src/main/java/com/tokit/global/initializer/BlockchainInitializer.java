@@ -21,6 +21,7 @@ import java.math.BigDecimal;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Random;
+import java.util.regex.Pattern;
 
 @Component
 @RequiredArgsConstructor
@@ -40,6 +41,12 @@ public class BlockchainInitializer implements CommandLineRunner {
     private static final String SEED_PASSWORD = "tokit1234";
     
     public boolean forceExecute = false;
+
+    /**
+     * 예전 시드가 만든 가짜 컨트랙트 주소 ({@code "0x" + String.format("%040x", i + 1000)}).
+     * 앞 32자리가 모두 0인 주소는 실제로 배포된 컨트랙트일 수 없다.
+     */
+    private static final Pattern SEED_MOCK_CONTRACT_ADDRESS = Pattern.compile("^0x0{32}[0-9a-fA-F]{8}$");
 
     private static final String[] SURNAMES = {"김", "이", "박", "최", "정", "강", "조", "윤", "장", "임", "한", "오", "신", "서"};
     private static final String[] NAMES = {"민준", "서준", "도윤", "예준", "시우", "하준", "주원", "지호", "지후", "준서", "지우", "지원", "수아", "채원"};
@@ -85,6 +92,8 @@ public class BlockchainInitializer implements CommandLineRunner {
             log.info("Test execution detected. Skipping bulk data seeding.");
             return;
         }
+
+        repointSeedAssetsToDefaultContract();
 
         // 0. Force insert default user (ID=1) '김토킷' via native query to prevent auto-increment offsets
         if (userRepository.findById(1L).isEmpty() && userRepository.findByEmail("test-investor@tokit.com").isEmpty()) {
@@ -137,13 +146,14 @@ public class BlockchainInitializer implements CommandLineRunner {
                 
                 BigDecimal price = BigDecimal.valueOf((rand.nextInt(20) + 1) * 5000); 
                 String status = rand.nextDouble() < 0.2 ? "청약중" : "거래중"; 
-                String mockContractAddr = "0x" + String.format("%040x", i + 1000);
 
                 Asset newAsset = assetRepository.save(Asset.builder()
                         .issuer(issuers.get(rand.nextInt(issuers.size())))
                         .name(assetName)
                         .symbol(symbol)
-                        .contractAddress(mockContractAddr)
+                        // 이체·조회는 종목의 컨트랙트로 가므로, 로컬에 실제로 배포된 기본 컨트랙트를 가리킨다.
+                        // 시드 종목은 모두 같은 컨트랙트를 공유하므로 온체인 잔고는 종목별로 나뉘지 않는다.
+                        .contractAddress(contractService.getDefaultContractAddress())
                         .totalSupply(BigDecimal.valueOf(1000000))
                         .issuePrice(price)
                         .status(status)
@@ -233,5 +243,27 @@ public class BlockchainInitializer implements CommandLineRunner {
             }
         }
         log.info("Whitelist synchronization completed.");
+    }
+
+    /**
+     * 예전 시드가 만든 가짜 컨트랙트 주소를 기본 컨트랙트 주소로 바꾼다.
+     *
+     * <p>체결·청약·대사는 종목의 컨트랙트 주소를 쓰는데, 가짜 주소에는 코드가 없어 모든 온체인 호출이
+     * 거절된다. 이미 시드가 들어간 로컬 DB를 다시 만들지 않아도 되도록 시작할 때 고친다.
+     * 패턴에 맞는 주소만 바꾸므로 실제 컨트랙트를 가리키는 종목은 건드리지 않는다.
+     */
+    void repointSeedAssetsToDefaultContract() {
+        String defaultAddress = contractService.getDefaultContractAddress();
+        int repointed = 0;
+        for (Asset asset : assetRepository.findAll()) {
+            String address = asset.getContractAddress();
+            if (address != null && SEED_MOCK_CONTRACT_ADDRESS.matcher(address).matches()) {
+                asset.updateContractAddress(defaultAddress);
+                repointed++;
+            }
+        }
+        if (repointed > 0) {
+            log.info("Repointed {} seed assets from mock contract addresses to {}", repointed, defaultAddress);
+        }
     }
 }

@@ -17,6 +17,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import com.tokit.infra.blockchain.BlockchainException;
 import org.springframework.batch.item.Chunk;
 import org.springframework.batch.item.ItemProcessor;
 import org.springframework.batch.item.ItemWriter;
@@ -26,6 +27,7 @@ import java.math.BigDecimal;
 import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.*;
@@ -73,6 +75,7 @@ class ReconciliationBatchConfigTest {
         testAsset = Asset.builder()
                 .name("Gangnam Tower STO")
                 .symbol("GANGNAM-STO")
+                .contractAddress("0xGANGNAM_CONTRACT")
                 .totalSupply(new BigDecimal("50000"))
                 .issuePrice(new BigDecimal("10000"))
                 .status("상장완료")
@@ -92,7 +95,7 @@ class ReconciliationBatchConfigTest {
     @DisplayName("walletProcessor: 오프체인 잔고(150)와 온체인 잔고(150)가 일치하는 경우 null을 반환하여 이벤트를 무시한다.")
     void walletProcessor_WhenBalancesMatch_ReturnsNull() throws Exception {
         // Given
-        when(contractService.balanceOfByPartition(eq("GANGNAM-STO"), eq("DEFAULT"), eq("0xRECONCILE_USER_ADDRESS_77")))
+        when(contractService.balanceOfByPartition(eq("0xGANGNAM_CONTRACT"), eq("DEFAULT"), eq("0xRECONCILE_USER_ADDRESS_77")))
                 .thenReturn(new BigDecimal("150")); // 일치
 
         ItemProcessor<Wallet, ReconciliationLog> processor = reconciliationBatchConfig.walletProcessor();
@@ -108,7 +111,7 @@ class ReconciliationBatchConfigTest {
     @DisplayName("walletProcessor: 오프체인 잔고(150)와 온체인 잔고(100) 간 오차(50) 발생 시 ReconciliationLog 객체를 생성한다.")
     void walletProcessor_WhenBalanceMismatch_ReturnsReconciliationLog() throws Exception {
         // Given
-        when(contractService.balanceOfByPartition(eq("GANGNAM-STO"), eq("DEFAULT"), eq("0xRECONCILE_USER_ADDRESS_77")))
+        when(contractService.balanceOfByPartition(eq("0xGANGNAM_CONTRACT"), eq("DEFAULT"), eq("0xRECONCILE_USER_ADDRESS_77")))
                 .thenReturn(new BigDecimal("100")); // 오프체인 150 vs 온체인 100 (차이 50)
 
         ItemProcessor<Wallet, ReconciliationLog> processor = reconciliationBatchConfig.walletProcessor();
@@ -126,6 +129,19 @@ class ReconciliationBatchConfigTest {
                 .isEqualTo(new BigDecimal("100").stripTrailingZeros());
         assertThat(result.getDifference().stripTrailingZeros())
                 .isEqualTo(new BigDecimal("50").stripTrailingZeros());
+    }
+
+    @Test
+    @DisplayName("walletProcessor: 온체인 조회가 실패하면 잔고 0으로 간주해 불일치를 만들지 않고 예외를 올린다.")
+    void walletProcessor_WhenRpcFails_PropagatesInsteadOfZero() {
+        when(contractService.balanceOfByPartition(eq("0xGANGNAM_CONTRACT"), eq("DEFAULT"), eq("0xRECONCILE_USER_ADDRESS_77")))
+                .thenThrow(new BlockchainException("node unreachable"));
+
+        ItemProcessor<Wallet, ReconciliationLog> processor = reconciliationBatchConfig.walletProcessor();
+
+        // 예외는 step의 재시도·스킵 정책이 처리한다. 여기서 0을 반환하면 허위 불일치 경보가 나간다.
+        assertThatThrownBy(() -> processor.process(testWallet)).isInstanceOf(BlockchainException.class);
+        verifyNoInteractions(tradingMetrics);
     }
 
     @Test

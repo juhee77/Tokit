@@ -1,8 +1,11 @@
 package com.tokit.infra.rabbitmq;
 
+import com.tokit.domain.asset.entity.Asset;
+import com.tokit.domain.asset.repository.AssetRepository;
 import com.tokit.global.config.RabbitMQConfig;
 import com.tokit.global.observability.TradingMetrics;
 import com.tokit.infra.alert.SlackAlertService;
+import com.tokit.infra.blockchain.BlockchainException;
 import com.tokit.infra.blockchain.ContractService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -17,13 +20,22 @@ public class TradeEventConsumer {
     private final ContractService contractService;
     private final SlackAlertService slackAlertService;
     private final TradingMetrics tradingMetrics;
+    private final AssetRepository assetRepository;
 
     @RabbitListener(queues = RabbitMQConfig.TRADE_QUEUE_NAME)
     public void consumeTradeEvent(TradeEvent event) {
         log.info("Consumed trade event from RabbitMQ: {}", event);
         try {
+            // 종목마다 컨트랙트가 다르므로 체결 종목의 컨트랙트로 이체한다. (#29)
+            // 이벤트에 주소를 싣지 않고 여기서 조회해, 배포 전에 큐에 쌓인 메시지도 같은 경로로 처리된다.
+            String contractAddress = assetRepository.findBySymbol(event.assetSymbol())
+                    .map(Asset::getContractAddress)
+                    .orElseThrow(() -> new BlockchainException(
+                            "No contract address for asset " + event.assetSymbol()));
+
             // 온체인 이체 처리 실행 (Force Transfer). 일시적 실패는 ContractService가 재시도합니다.
             contractService.handleTransferByPartition(
+                    contractAddress,
                     event.assetSymbol(),
                     "DEFAULT",
                     event.sellerWalletAddress(),

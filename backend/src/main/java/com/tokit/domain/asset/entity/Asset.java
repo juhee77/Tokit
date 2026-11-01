@@ -51,6 +51,10 @@ public class Asset {
         this.contractAddress = contractAddress;
     }
 
+    public void updateContractAddress(String contractAddress) {
+        this.contractAddress = contractAddress;
+    }
+
     public void updateStatus(String status) {
         this.status = status;
     }

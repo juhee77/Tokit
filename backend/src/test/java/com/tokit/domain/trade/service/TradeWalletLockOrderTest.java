@@ -87,7 +87,7 @@ class TradeWalletLockOrderTest {
     @BeforeEach
     void setUp() {
         cleanUp();
-        doNothing().when(contractService).handleTransferByPartition(any(), any(), any(), any(), any());
+        doNothing().when(contractService).handleTransferByPartition(any(), any(), any(), any(), any(), any());
 
         String uid = UUID.randomUUID().toString();
         Issuer issuer = issuerRepository.save(Issuer.builder()
@@ -152,7 +152,7 @@ class TradeWalletLockOrderTest {
                         Long buyOrderId, Long sellOrderId, String symbol) {
         try {
             start.await();
-            tradeService.saveTrade(buyOrderId, sellOrderId, symbol, PRICE, QTY);
+            tradeService.saveTrade(buyOrderId, sellOrderId, symbol, PRICE, QTY, BigDecimal.ZERO);
         } catch (Exception e) {
             failures.add(e);
         } finally {

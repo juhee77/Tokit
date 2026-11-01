@@ -82,7 +82,7 @@ class ReconciliationBatchTest {
                 .build(); // Total off-chain = 120
 
         // On-chain returns 100 (diff: 20)
-        when(contractService.balanceOfByPartition("APPL-STO", "DEFAULT", "0x70997970C51812dc3A010C7d01b50e0d17dc79C8"))
+        when(contractService.balanceOfByPartition("0x5FbDB2315678afecb367f032d93F642f64180aa3", "DEFAULT", "0x70997970C51812dc3A010C7d01b50e0d17dc79C8"))
                 .thenReturn(BigDecimal.valueOf(100));
 
         ItemProcessor<Wallet, ReconciliationLog> processor = reconciliationBatchConfig.walletProcessor();
@@ -123,7 +123,7 @@ class ReconciliationBatchTest {
                 .build(); // Total off-chain = 120
 
         // On-chain returns 120 (Match)
-        when(contractService.balanceOfByPartition("APPL-STO", "DEFAULT", "0x70997970C51812dc3A010C7d01b50e0d17dc79C8"))
+        when(contractService.balanceOfByPartition("0x5FbDB2315678afecb367f032d93F642f64180aa3", "DEFAULT", "0x70997970C51812dc3A010C7d01b50e0d17dc79C8"))
                 .thenReturn(BigDecimal.valueOf(120));
 
         ItemProcessor<Wallet, ReconciliationLog> processor = reconciliationBatchConfig.walletProcessor();

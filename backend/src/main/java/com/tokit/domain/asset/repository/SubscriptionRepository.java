@@ -21,5 +21,9 @@ public interface SubscriptionRepository extends JpaRepository<Subscription, Long
             + "WHERE s.user.id = :userId AND s.subscribedAt >= :since")
     BigDecimal sumAmountByUserSince(@Param("userId") Long userId, @Param("since") LocalDateTime since);
 
+    /** 종목의 누적 배정 수량 (총 발행량 검증용). 호출 측이 종목 행 락을 쥔 상태여야 합산이 유효하다. */
+    @Query("SELECT COALESCE(SUM(s.tokenQuantity), 0) FROM Subscription s WHERE s.asset.id = :assetId")
+    BigDecimal sumTokenQuantityByAsset(@Param("assetId") Long assetId);
+
     List<Subscription> findByUser_IdOrderBySubscribedAtDesc(Long userId);
 }

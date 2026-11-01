@@ -20,7 +20,8 @@ import java.time.LocalDateTime;
     name = "subscriptions",
     indexes = {
         @Index(name = "idx_subscriptions_user_subscribed_at", columnList = "user_id, subscribed_at"),
-        @Index(name = "idx_subscriptions_user_issuer", columnList = "user_id, issuer_id")
+        @Index(name = "idx_subscriptions_user_issuer", columnList = "user_id, issuer_id"),
+        @Index(name = "idx_subscriptions_asset", columnList = "asset_id")
     }
 )
 @Getter

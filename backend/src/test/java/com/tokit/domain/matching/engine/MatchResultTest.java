@@ -26,7 +26,7 @@ class MatchResultTest {
         Order takerOrder = Order.builder().user(taker).asset(asset).type(OrderType.BUY).price(new BigDecimal("10000")).quantity(new BigDecimal("10")).build();
         Order makerOrder = Order.builder().user(maker).asset(asset).type(OrderType.SELL).price(new BigDecimal("10000")).quantity(new BigDecimal("10")).build();
 
-        MatchResult.Match match = new MatchResult.Match(makerOrder, new BigDecimal("10000"), new BigDecimal("10"));
+        MatchResult.Match match = new MatchResult.Match(makerOrder, new BigDecimal("10000"), new BigDecimal("10"), BigDecimal.ZERO);
 
         // When
         MatchResult result = new MatchResult(takerOrder, List.of(match));

@@ -191,7 +191,7 @@ class TradeServiceTest {
         when(tradeRepository.save(any(Trade.class))).thenReturn(mockTrade);
 
         // When
-        Trade result = tradeService.saveTrade(100L, 200L, "GWANGHWAMUN-STO", tradePrice, tradeQty);
+        Trade result = tradeService.saveTrade(100L, 200L, "GWANGHWAMUN-STO", tradePrice, tradeQty, BigDecimal.ZERO);
 
         // Then
         // 1. 매수자: 홀딩 원화 차감 (50,050 -> 0원)
@@ -210,6 +210,96 @@ class TradeServiceTest {
         // 롤백되어도 원장에 없는 체결이 블록체인으로 넘어간다.
         verify(orderEventPublisher, never()).publishTrade(any());
         verify(eventPublisher, times(1)).publishEvent(any(PostCommitEvents.TradeSettled.class));
+    }
+
+    @Test
+    @DisplayName("saveTrade: 매수 지정가(12,000원)보다 저렴한 메이커 호가(10,000원)에 체결될 때 차액과 수수료 차액이 매수자 가용 잔고로 환급된다")
+    void saveTrade_PriceImprovementRefundsDifferenceToBuyerBalance() throws Exception {
+        // Given: 매수 지정가 12,000원 / 매수 수량 5주 (홀딩액 = 60,000 + 수수료 60 = 60,060원)
+        Order highPriceBuyOrder = Order.builder()
+                .user(buyer)
+                .asset(testAsset)
+                .type(OrderType.BUY)
+                .price(new BigDecimal("12000"))
+                .quantity(new BigDecimal("5"))
+                .status(OrderStatus.OPEN)
+                .build();
+        setField(highPriceBuyOrder, "id", 102L);
+
+        buyerKrwWallet.updateBalance(new BigDecimal("500000"), new BigDecimal("60060"));
+
+        BigDecimal tradePrice = new BigDecimal("10000"); // 메이커 매도 호가 10,000원에 체결
+        BigDecimal tradeQty = new BigDecimal("5");
+
+        Trade mockTrade = Trade.builder()
+                .buyOrder(highPriceBuyOrder)
+                .sellOrder(sellOrder)
+                .asset(testAsset)
+                .price(tradePrice)
+                .quantity(tradeQty)
+                .tradedAt(LocalDateTime.now())
+                .build();
+        setField(mockTrade, "id", 998L);
+
+        when(orderRepository.findById(102L)).thenReturn(Optional.of(highPriceBuyOrder));
+        when(orderRepository.findById(200L)).thenReturn(Optional.of(sellOrder));
+        when(assetRepository.findBySymbol("GWANGHWAMUN-STO")).thenReturn(Optional.of(testAsset));
+        when(walletRepository.findKrwWalletByUserIdWithPessimisticLock(1L)).thenReturn(Optional.of(buyerKrwWallet));
+        when(walletRepository.findKrwWalletByUserIdWithPessimisticLock(2L)).thenReturn(Optional.of(sellerKrwWallet));
+        when(walletRepository.findAssetWalletByUserIdAndAssetIdWithPessimisticLock(1L, 10L)).thenReturn(Optional.of(buyerAssetWallet));
+        when(walletRepository.findAssetWalletByUserIdAndAssetIdWithPessimisticLock(2L, 10L)).thenReturn(Optional.of(sellerAssetWallet));
+        when(tradeRepository.save(any(Trade.class))).thenReturn(mockTrade);
+
+        // When
+        tradeService.saveTrade(102L, 200L, "GWANGHWAMUN-STO", tradePrice, tradeQty, BigDecimal.ZERO);
+
+        // Then
+        // 실제 소요 비용: 50,000 + 수수료 50 = 50,050원
+        // 홀딩 해제: 60,060원 -> lockedBalance = 0원
+        // 환급액: 60,060 - 50,050 = 10,010원 -> 가용 잔고: 500,000 + 10,010 = 510,010원
+        assertThat(buyerKrwWallet.getLockedBalance().stripTrailingZeros()).isEqualTo(BigDecimal.ZERO);
+        assertThat(buyerKrwWallet.getBalance().stripTrailingZeros()).isEqualTo(new BigDecimal("510010").stripTrailingZeros());
+    }
+
+    @Test
+    @DisplayName("saveTrade: 부분 체결이 여러 번 나도 수수료 절사 오차 없이 전량 체결 시 홀딩이 0이 된다.")
+    void saveTrade_PartialFillsReleaseExactHold() throws Exception {
+        // Given: 500원 x 2주 매수 (홀딩액 = 1,000 + 수수료 floor(1.0) = 1,001원)
+        // 체결분마다 수수료를 따로 절사하면 floor(0.5) + floor(0.5) = 0이라 1원이 영구히 남는다.
+        Order smallBuyOrder = Order.builder()
+                .user(buyer)
+                .asset(testAsset)
+                .type(OrderType.BUY)
+                .price(new BigDecimal("500"))
+                .quantity(new BigDecimal("2"))
+                .status(OrderStatus.OPEN)
+                .build();
+        setField(smallBuyOrder, "id", 103L);
+
+        buyerKrwWallet.updateBalance(new BigDecimal("500000"), new BigDecimal("1001"));
+        BigDecimal tradePrice = new BigDecimal("500");
+        BigDecimal oneShare = BigDecimal.ONE;
+
+        when(orderRepository.findById(103L)).thenReturn(Optional.of(smallBuyOrder));
+        when(orderRepository.findById(200L)).thenReturn(Optional.of(sellOrder));
+        when(assetRepository.findBySymbol("GWANGHWAMUN-STO")).thenReturn(Optional.of(testAsset));
+        when(walletRepository.findKrwWalletByUserIdWithPessimisticLock(1L)).thenReturn(Optional.of(buyerKrwWallet));
+        when(walletRepository.findKrwWalletByUserIdWithPessimisticLock(2L)).thenReturn(Optional.of(sellerKrwWallet));
+        when(walletRepository.findAssetWalletByUserIdAndAssetIdWithPessimisticLock(1L, 10L)).thenReturn(Optional.of(buyerAssetWallet));
+        when(walletRepository.findAssetWalletByUserIdAndAssetIdWithPessimisticLock(2L, 10L)).thenReturn(Optional.of(sellerAssetWallet));
+        when(tradeRepository.save(any(Trade.class))).thenAnswer(invocation -> {
+            Trade trade = invocation.getArgument(0);
+            setField(trade, "id", 997L);
+            return trade;
+        });
+
+        // When: 1주씩 두 번 체결 (잔량 2 -> 1 -> 0)
+        tradeService.saveTrade(103L, 200L, "GWANGHWAMUN-STO", tradePrice, oneShare, BigDecimal.ONE);
+        tradeService.saveTrade(103L, 200L, "GWANGHWAMUN-STO", tradePrice, oneShare, BigDecimal.ZERO);
+
+        // Then: 실제 비용은 500 + 500 (수수료는 각각 절사되어 0원), 남은 1원은 가용 잔고로 환급된다.
+        assertThat(buyerKrwWallet.getLockedBalance()).isEqualByComparingTo("0");
+        assertThat(buyerKrwWallet.getBalance()).isEqualByComparingTo("500001");
     }
 
     @Test

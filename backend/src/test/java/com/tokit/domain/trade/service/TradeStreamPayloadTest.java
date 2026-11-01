@@ -73,7 +73,7 @@ class TradeStreamPayloadTest {
 
     @BeforeEach
     void setUp() {
-        doNothing().when(contractService).handleTransferByPartition(any(), any(), any(), any(), any());
+        doNothing().when(contractService).handleTransferByPartition(any(), any(), any(), any(), any(), any());
 
         String uid = UUID.randomUUID().toString().substring(0, 8);
         Issuer issuer = issuerRepository.save(Issuer.builder()
@@ -112,7 +112,7 @@ class TradeStreamPayloadTest {
     void broadcastPayloadMustBeDto() {
         transactionTemplate.execute(status ->
                 tradeService.saveTrade(buyOrder.getId(), sellOrder.getId(),
-                        asset.getSymbol(), BigDecimal.valueOf(10000), BigDecimal.ONE));
+                        asset.getSymbol(), BigDecimal.valueOf(10000), BigDecimal.ONE, BigDecimal.ZERO));
 
         ArgumentCaptor<Object> payload = ArgumentCaptor.forClass(Object.class);
         verify(tradeStreamBroadcaster).broadcast(
@@ -145,7 +145,7 @@ class TradeStreamPayloadTest {
     void payloadMustBeSerializableOutsideTransaction() throws Exception {
         transactionTemplate.execute(status ->
                 tradeService.saveTrade(buyOrder.getId(), sellOrder.getId(),
-                        asset.getSymbol(), BigDecimal.valueOf(10000), BigDecimal.ONE));
+                        asset.getSymbol(), BigDecimal.valueOf(10000), BigDecimal.ONE, BigDecimal.ZERO));
 
         ArgumentCaptor<Object> payload = ArgumentCaptor.forClass(Object.class);
         verify(tradeStreamBroadcaster).broadcast(anyString(), anyString(), anyString(), payload.capture());

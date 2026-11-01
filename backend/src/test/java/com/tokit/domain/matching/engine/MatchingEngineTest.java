@@ -119,6 +119,10 @@ class MatchingEngineTest {
 
         // 신규 매수 주문 잔량 0주
         assertThat(incomingBuyOrder.getRemainingQuantity().stripTrailingZeros()).isEqualTo(BigDecimal.ZERO);
+
+        // 체결별 테이커 잔량: 정산은 모든 체결 계산이 끝난 뒤에 일어나므로 체결 시점의 잔량을 따로 남긴다.
+        assertThat(result.matches().get(0).incomingRemainAfter()).isEqualByComparingTo("5");
+        assertThat(result.matches().get(1).incomingRemainAfter()).isEqualByComparingTo("0");
     }
 
     @Test

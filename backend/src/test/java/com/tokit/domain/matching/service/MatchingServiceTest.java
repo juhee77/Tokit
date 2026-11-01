@@ -138,7 +138,7 @@ class MatchingServiceTest {
         when(orderRepository.findMatchableOrders(eq("PANGYO-STO"), eq(OrderType.SELL), any(), any(), any()))
                 .thenReturn(List.of(sellOrder));
 
-        MatchResult.Match match = new MatchResult.Match(sellOrder, new BigDecimal("10000"), new BigDecimal("10"));
+        MatchResult.Match match = new MatchResult.Match(sellOrder, new BigDecimal("10000"), new BigDecimal("10"), BigDecimal.ZERO);
         MatchResult matchResult = new MatchResult(buyOrder, List.of(match));
 
         when(matchingEngine.match(eq(buyOrder), any())).thenReturn(matchResult);
@@ -148,7 +148,8 @@ class MatchingServiceTest {
 
         // Then
         verify(tradeService, times(1)).saveTrade(
-                eq(100L), eq(200L), eq("PANGYO-STO"), eq(new BigDecimal("10000")), eq(new BigDecimal("10"))
+                eq(100L), eq(200L), eq("PANGYO-STO"), eq(new BigDecimal("10000")), eq(new BigDecimal("10")),
+                eq(BigDecimal.ZERO)
         );
         verify(orderRepository, atLeastOnce()).save(any(Order.class));
 
@@ -157,6 +158,21 @@ class MatchingServiceTest {
         verify(messagingTemplate, never()).convertAndSend(anyString(), any(OrderBookDto.class));
         verify(eventPublisher, times(1))
                 .publishEvent(new PostCommitEvents.OrderBookChanged("PANGYO-STO"));
+    }
+
+    @Test
+    @DisplayName("matchOrder: DLQ에서 재발행된 이벤트라도 락 획득 후 주문이 이미 체결되었으면 다시 매칭하지 않는다. (#23)")
+    void matchOrder_ReplayedEventForFilledOrder_DoesNotMatchAgain() throws Exception {
+        // 첫 처리가 실제로는 커밋된 뒤 실패로 보고되어 DLQ로 갔고, 관리자가 재발행한 상황.
+        setField(buyOrder, "status", OrderStatus.FILLED);
+        setField(buyOrder, "remainQty", BigDecimal.ZERO);
+        when(assetRepository.findBySymbolForUpdate("PANGYO-STO")).thenReturn(Optional.of(testAsset));
+        when(orderRepository.findByIdWithAsset(buyOrder.getId())).thenReturn(Optional.of(buyOrder));
+
+        matchingService.matchOrder(buyOrder);
+
+        verifyNoInteractions(matchingEngine, tradeService);
+        verify(orderRepository, never()).save(any(Order.class));
     }
 
     @Test

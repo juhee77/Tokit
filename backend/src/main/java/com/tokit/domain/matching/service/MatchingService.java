@@ -99,7 +99,10 @@ public class MatchingService {
             // 체결 내역 저장 (TradeService에서 내부적으로 SSE 이벤트 방송)
             Long buyOrderId = incomingOrder.getOrderType() == OrderType.BUY ? incomingOrder.getId() : maker.getId();
             Long sellOrderId = incomingOrder.getOrderType() == OrderType.SELL ? incomingOrder.getId() : maker.getId();
-            tradeService.saveTrade(buyOrderId, sellOrderId, incomingOrder.getAssetSymbol(), price, quantity);
+            // 메이커는 한 매칭에서 한 번만 체결되므로 현재 잔량이 곧 이 체결 직후의 잔량이다.
+            BigDecimal buyerRemainAfter = incomingOrder.getOrderType() == OrderType.BUY
+                    ? match.incomingRemainAfter() : maker.getRemainingQuantity();
+            tradeService.saveTrade(buyOrderId, sellOrderId, incomingOrder.getAssetSymbol(), price, quantity, buyerRemainAfter);
 
             // 체결분만큼 양쪽 가격대에서 잔량을 덜어낸다.
             // 테이커는 자기 지정가에, 메이커는 자기 호가에 올라가 있다.
