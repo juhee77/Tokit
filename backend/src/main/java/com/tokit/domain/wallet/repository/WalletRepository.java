@@ -42,6 +42,10 @@ public interface WalletRepository extends JpaRepository<Wallet, Long> {
     @Query("SELECT w FROM Wallet w WHERE w.user.id = :userId AND w.asset IS NULL")
     Optional<Wallet> findKrwWalletByUserId(@Param("userId") Long userId);
 
+    // 원화(KRW) 지갑 전체 조회 (매수 홀딩 정산 드라이런 용)
+    @Query("SELECT w FROM Wallet w WHERE w.asset IS NULL")
+    List<Wallet> findAllKrwWallets();
+
     // 특정 토큰 자산 지갑 조회를 위한 메서드
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("SELECT w FROM Wallet w WHERE w.user.id = :userId AND w.asset.id = :assetId")
